@@ -93,11 +93,12 @@ store and prints the Claude Code / Cursor / Kiro wiring. Wiring a real repo (one
 
 **Done criteria:** a polyglot company manifest produces one unified cross-repo map.
 
-**Done so far:** Swift + Kotlin extractors via tree-sitter (ADR 0008), driven by a real need
-(RN native modules in the dogfood repo). A single repo now yields one unified map across
-TypeScript + Swift + Kotlin — 721 functions on ghost_daddy, native call graphs included, the
-core untouched (ADR 0005). Go/Python/Java remain earn-it: add each only when a real service
-needs it, the same way.
+**Done so far:** Swift + Kotlin extractors via tree-sitter (ADR 0008), and a Go extractor
+with chi route extraction (ADR 0010) — each driven by a real service. A single repo yields one
+unified map across TypeScript + Swift + Kotlin (721 functions on ghost_daddy), and a polyglot
+workspace links across languages: the HMS Next.js frontend ↔ the Go/chi backend resolved 7
+cross-repo HTTP contracts, with `atlas impact` spanning TS↔Go. The core is untouched (ADR 0005).
+Python/Java remain earn-it: add each only when a real service needs it, the same way.
 
 ---
 

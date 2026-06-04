@@ -2,6 +2,19 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Go extractor + chi routes (ADR 0010)
+
+- No schema change.
+- `extractors/go` (tree-sitter-go, pinned `0.23.1` for ABI compatibility with the 0.21 core):
+  `function`/method nodes (`Recv.method`), name-resolved `call` edges, and `exposes` for chi
+  routes — resolving nested `r.Route(...)` prefixes and constant base paths
+  (`BasePath = prefix + Version`). Handlers resolve precisely via `Type.method`.
+- Detection now treats Go as extractable and infers `be` + framework from `go.mod` routers
+  (chi/gin/echo/fiber/mux). `cli/extract.ts` runs the Go extractor when `.go` is present.
+- Dogfooded on the HMS system: `hms-admin` (Next.js/TS) ↔ `hms-backend` (Go/chi) linked
+  **7 cross-repo contracts** (e.g. `GET /api/v1/admin/clinics → AdminHandler.ListClinics`),
+  3 honest externals (env-var base URLs); `atlas impact` on a Go handler lists the FE consumer.
+
 ## [Unreleased] — Automatic stack detection (ADR 0009)
 
 - No schema change: detection drives the existing manifest `role`/`type` fields and the
