@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
+import type { DetectionResult } from "./detect.js";
 
 export function storeRoot(): string {
   return process.env.ATLAS_HOME || path.join(os.homedir(), ".atlas");
@@ -81,6 +82,21 @@ export function readMap(workspace: string): MergedMap {
     throw new Error(`No map for workspace "${workspace}". Run: atlas scan first.`);
   }
   return JSON.parse(fs.readFileSync(file, "utf8")) as MergedMap;
+}
+
+/** Per-repo stack detection (generated data, not part of the manifest contract). */
+export function writeDetection(workspace: string, repoId: string, d: DetectionResult): string {
+  return writeJson(path.join(workspaceDir(workspace), `${repoId}.detection.json`), d);
+}
+
+export function readDetection(workspace: string, repoId: string): DetectionResult | undefined {
+  const file = path.join(workspaceDir(workspace), `${repoId}.detection.json`);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as DetectionResult;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Repo ids that have stored topology in a workspace. */

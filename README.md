@@ -32,8 +32,9 @@ The agent brings the search; this tool brings the map.
 ```bash
 npm install && npm run build
 
-# scan one or more repos into a workspace (re-link runs automatically)
-node bin/atlas.js scan /path/to/a/ts-repo -w myapp --role fe
+# scan one or more repos into a workspace (auto-detects stack; re-link runs automatically)
+node bin/atlas.js detect /path/to/a/repo            # see inferred languages/frameworks/role
+node bin/atlas.js scan /path/to/a/repo -w myapp     # role/type auto-detected (override with --role)
 
 node bin/atlas.js context createOrder -w myapp    # a symbol + its callers + callees
 node bin/atlas.js context src/orders/api.ts -w myapp   # or a file → its functions

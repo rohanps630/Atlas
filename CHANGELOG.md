@@ -2,6 +2,20 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Automatic stack detection (ADR 0009)
+
+- No schema change: detection drives the existing manifest `role`/`type` fields and the
+  generated agent docs; detected frameworks live in generated data, not the manifest contract.
+- `cli/detect.ts`: infers languages, frameworks (curated dep/config map), role, and workspace
+  type from `package.json`, config, build files, and file extensions. Pure `inferStack` +
+  `detectStack` (I/O). Local and deterministic (ADR 0006).
+- `scan` auto-fills `--role`/`--type` from detection (still overridable) and writes a per-repo
+  `*.detection.json` to the store; `refresh` re-detects.
+- Agent artifacts (`atlas.steering.md`, `architecture.md`) now include the detected stack, so
+  the agent learns the frameworks without being told.
+- New `atlas detect <repo>` command prints what would be inferred.
+- Boundary (ADR 0002 / rejected.md): detection selects extractors + context, never "workflows".
+
 ## [Unreleased] — Phase 4 (Swift + Kotlin extractors)
 
 - No schema change: native output uses the existing v0 node/edge shapes.

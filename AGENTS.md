@@ -55,6 +55,11 @@ automatically during `scan`/`refresh` and merge into the repo's topology, so `co
 `impact` and the MCP server cover native modules too. `cli/extract.ts` orchestrates the
 per-repo, multi-language extraction.
 
+Stack detection (ADR 0009, `cli/detect.ts`) infers languages, frameworks, role, and type
+from deps/config/structure; `scan` auto-fills `--role`/`--type` (overridable) and the agent
+docs include the detected stack. `atlas detect <repo>` prints the inference. Detection selects
+extractors + context only — never workflows (ADR 0002).
+
 **Next:** add further language extractors (Go via `go list`, Python via `ast`, Java) one at a
 time, only when a real service needs one — each emits the same normalized JSON; the core is
 untouched (ADR 0005). Do not build any Phase 5 audit/report feature without a superseding ADR

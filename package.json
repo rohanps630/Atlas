@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "atlas": "node bin/atlas.js",
-    "test": "tsx --test core/*.test.ts extractors/typescript/*.test.ts extractors/native/*.test.ts",
+    "test": "tsx --test core/*.test.ts extractors/typescript/*.test.ts extractors/native/*.test.ts cli/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
