@@ -2,6 +2,19 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Phase 3 (expose the map to agents)
+
+- No schema change.
+- `mcp/server.ts`: MCP server (stdio, read-only over the data store, no network) exposing
+  `atlas_context`, `atlas_callers`, `atlas_impact`, `atlas_endpoints`. New `atlas mcp` command.
+- `cli/query.ts`: shared query layer (store + pure core) used by the MCP server.
+- `atlas agent` command generates, into the data store, `architecture.md` (greppable summary)
+  and `atlas.steering.md` (always-on agent context), and prints wiring for Claude Code /
+  Cursor / Kiro. Generated artifacts stay in ~/.atlas (ADR 0003); only a one-line import
+  goes into a target repo's CLAUDE.md, added by the user.
+- Done-criterion demonstrated: an MCP client listed the tools and answered cross-repo
+  questions (endpoints, impact) by calling the server.
+
 ## [Unreleased] — Phase 2 (slice 2b: exposes + impact)
 
 - No schema version bump: implements the already-documented v0 `exposes` shape (§2).

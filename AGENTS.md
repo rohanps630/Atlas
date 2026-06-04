@@ -44,14 +44,18 @@ manifest; and commands `scan`, `context`, `endpoints`, `impact`. Cross-repo reso
 verified by the `fixtures/cross` FE+BE pair (a missing repo degrades to `external` and
 resolves when added).
 
-**The current task is Phase 3** — expose the map to agents: an MCP server
-(`context`/`callers`/`impact`/`endpoints`), a greppable `architecture.md`/`topology.json`,
-and an always-on steering/patterns file so a coding agent uses Atlas without being told.
-Generated agent-facing artifacts go to the data store (`~/.atlas/<ws>/`), never into target
-repos (ADR 0003).
+Phase 3 is also built: `atlas mcp` (MCP server exposing `context`/`callers`/`impact`/
+`endpoints` over stdio, read-only, no network) and `atlas agent` (generates `architecture.md`
++ `atlas.steering.md` into the data store and prints Claude Code / Cursor / Kiro wiring).
+Generated artifacts stay in `~/.atlas/<ws>/`; only a one-line import goes into a target repo's
+CLAUDE.md, added by the owner.
 
-Build/run: `npm install && npm run build`, then `node bin/atlas.js <scan|context|endpoints|impact>`.
-Tests: `npm test`.
+**The next task is Phase 4** — add language extractors (Go, Python, Java) one at a time, only
+when a real service needs one. Each emits the same normalized JSON; the core is untouched.
+Do not build any Phase 5 audit/report feature without a superseding ADR (see docs/rejected.md).
+
+Build/run: `npm install && npm run build`, then
+`node bin/atlas.js <scan|context|endpoints|impact|agent|mcp>`. Tests: `npm test`.
 
 ## Conventions
 - CLI entry: `bin/atlas.js` (stub). Commands route to `cli/`.

@@ -3,9 +3,9 @@
 A personal, local-first tool that gives AI coding agents the one thing they can't
 cheaply discover on their own: **a map of the whole system across repositories.**
 
-> Status: **Phase 2 complete** — multi-repo workspaces, FE↔backend contract linking,
-> `external` nodes for missing repos, and cross-repo impact analysis. See
-> [`docs/phases.md`](docs/phases.md) for what's built and what's next.
+> Status: **Phase 3 complete** — multi-repo workspaces, FE↔backend contract linking,
+> cross-repo impact, and an MCP server + steering file so coding agents use the map
+> automatically. See [`docs/phases.md`](docs/phases.md) for what's built and what's next.
 
 ---
 
@@ -44,6 +44,17 @@ node bin/atlas.js endpoints -w myapp              # cross-repo links + external 
 `scan` reads each repo (never modifies it) and writes only to `~/.atlas/<workspace>/`
 (override the store root with `ATLAS_HOME`). With a single workspace/repo, `-w` and
 `--repo` can be omitted. `npm test` runs the core + extractor tests.
+
+### Make a coding agent use Atlas automatically
+
+```bash
+node bin/atlas.js agent -w myapp     # generate steering + architecture.md, print wiring
+node bin/atlas.js mcp                # run the MCP server (stdio) for context/callers/impact/endpoints
+```
+
+`atlas agent` writes an always-on steering file and a greppable `architecture.md` into the
+store and prints how to wire them into Claude Code (`@import` + `claude mcp add`), Cursor, or
+Kiro. After that the agent knows what Atlas provides and calls it without being told.
 
 ## Read the docs in this order
 

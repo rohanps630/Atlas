@@ -16,6 +16,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "ts-morph": "^25.0.1"
   },
   "devDependencies": {

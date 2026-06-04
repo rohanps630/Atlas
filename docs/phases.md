@@ -64,7 +64,7 @@ and adding it resolves the edge automatically.
 
 ---
 
-## Phase 3 — Expose the map to agents 🚧
+## Phase 3 — Expose the map to agents ✅
 
 **Goal:** let Claude Code / Kiro query the map on demand instead of reading files.
 
@@ -75,6 +75,11 @@ and adding it resolves the edge automatically.
   context for the agent. This is the surviving piece of the old "patterns file" idea.
 
 **Done criteria:** an agent answers a cross-repo question by calling the MCP server.
+
+**Met:** `atlas mcp` serves `context`/`callers`/`impact`/`endpoints` over stdio (verified by an
+MCP client). `atlas agent` generates `architecture.md` + `atlas.steering.md` into the data
+store and prints the Claude Code / Cursor / Kiro wiring. Wiring a real repo (one import line +
+`claude mcp add`) is the owner's step — it edits the target repo, so it's not done automatically.
 
 ---
 
