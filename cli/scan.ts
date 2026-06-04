@@ -11,12 +11,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { extractRepoAll } from "./extract.js";
+import { detectStack } from "./detect.js";
 import { linkRepos } from "../core/link.js";
 import type { Manifest, RepoEntry, RepoRole, WorkspaceType } from "../core/schema.js";
 import {
   manifestExists,
   readAllTopologies,
   readManifest,
+  writeDetection,
   writeManifest,
   writeMap,
   writeTopology,
@@ -41,13 +43,23 @@ export function runScan(args: string[]): number {
 
   const id = opts.id ?? path.basename(abs);
   const workspace = opts.workspace ?? id;
-  const role: RepoRole = opts.role ?? "fe";
+
+  // Detect the stack; auto-fill role/type/language unless overridden (ADR 0009).
+  const detection = detectStack(abs);
+  const role: RepoRole = opts.role ?? detection.role;
+  const primaryLanguage = detection.languages[0]?.replace(/ .*/, "") ?? "typescript";
+  console.error(
+    `detected: ${detection.languages.join(", ") || "?"}` +
+      `${detection.frameworks.length ? ` | ${detection.frameworks.join(", ")}` : ""}` +
+      ` | role=${role}${opts.role ? " (override)" : ""}, type=${opts.type ?? detection.type}`,
+  );
 
   // Upsert this repo into the workspace manifest.
-  const manifest = loadOrInitManifest(workspace, opts.type);
-  const entry: RepoEntry = { id, path: abs, role, language: "typescript" };
+  const manifest = loadOrInitManifest(workspace, opts.type ?? detection.type);
+  const entry: RepoEntry = { id, path: abs, role, language: primaryLanguage };
   manifest.repos = [...manifest.repos.filter((r) => r.id !== id), entry];
   writeManifest(manifest);
+  writeDetection(workspace, id, detection);
 
   console.error(`scanning ${abs} as "${id}" (workspace "${workspace}", role ${role}) …`);
   const start = Date.now();

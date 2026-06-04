@@ -10,8 +10,15 @@
 
 import * as fs from "node:fs";
 import { extractRepoAll } from "./extract.js";
+import { detectStack } from "./detect.js";
 import { linkRepos } from "../core/link.js";
-import { readAllTopologies, readManifest, writeMap, writeTopology } from "./store.js";
+import {
+  readAllTopologies,
+  readManifest,
+  writeDetection,
+  writeMap,
+  writeTopology,
+} from "./store.js";
 import { writeAgentFiles } from "./agent.js";
 import { resolveWorkspace } from "./workspace.js";
 
@@ -32,6 +39,7 @@ export function runRefresh(args: string[]): number {
       console.error(`  skip ${r.id} — path no longer exists: ${r.path}`);
       continue;
     }
+    writeDetection(ws, r.id, detectStack(r.path));
     const { output: out, perLanguage } = extractRepoAll(r.path, r.id);
     writeTopology(ws, out);
     scanned++;

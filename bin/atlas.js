@@ -14,7 +14,8 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // from the CLI itself, but they are not implemented yet.
 const COMMANDS = {
   status:   { phase: 0, available: true,  desc: "Show tool version, phase, and data-store location" },
-  scan:     { phase: 1, available: true,  desc: "Scan a TypeScript repo and write its topology to the store" },
+  detect:   { phase: 4, available: true,  desc: "Detect a repo's languages, frameworks, and role" },
+  scan:     { phase: 1, available: true,  desc: "Scan a repo (auto-detects stack) and write its topology" },
   context:  { phase: 1, available: true,  desc: "Emit a focused context pack (target + callers + callees)" },
   impact:   { phase: 2, available: true,  desc: "Show what a change to <target> affects (intra + cross-repo)" },
   endpoints:{ phase: 2, available: true,  desc: "List cross-repo links and external (unmatched) endpoints" },
@@ -32,6 +33,7 @@ const ROUTES = {
   mcp:       { mod: "dist/mcp/server.js",    fn: "runMcp" },
   agent:     { mod: "dist/cli/agent.js",     fn: "runAgent" },
   refresh:   { mod: "dist/cli/refresh.js",   fn: "runRefresh" },
+  detect:    { mod: "dist/cli/detect-cmd.js", fn: "runDetect" },
 };
 
 async function route(cmd, args) {

@@ -14,6 +14,7 @@ not silently change course — write a new ADR that **supersedes** the old one a
 | [0006](0006-local-only-no-network.md) | Local-only, no network in the pipeline | Accepted |
 | [0007](0007-language-typescript-node.md) | Build the tool in TypeScript/Node | Accepted |
 | [0008](0008-native-extractors-tree-sitter.md) | Swift & Kotlin extractors via tree-sitter | Accepted |
+| [0009](0009-automatic-stack-detection.md) | Automatic stack detection drives scan config | Accepted |
 
 ## Format
 
