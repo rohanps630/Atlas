@@ -14,6 +14,10 @@ Schema changes must be recorded here (see docs/schema.md).
   goes into a target repo's CLAUDE.md, added by the user.
 - Done-criterion demonstrated: an MCP client listed the tools and answered cross-repo
   questions (endpoints, impact) by calling the server.
+- `atlas refresh` command: re-scans every repo in a workspace manifest, re-links, and
+  regenerates the agent files in one step (a missing repo path is skipped, not an error).
+  Keeps the map cheap to regenerate (philosophy #5); no background/auto-maintenance
+  (that remains rejected — stale-but-trusted is worse than no map).
 
 ## [Unreleased] — Phase 2 (slice 2b: exposes + impact)
 
