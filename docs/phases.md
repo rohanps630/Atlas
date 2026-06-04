@@ -83,7 +83,7 @@ store and prints the Claude Code / Cursor / Kiro wiring. Wiring a real repo (one
 
 ---
 
-## Phase 4 — More languages ⬜
+## Phase 4 — More languages 🚧 (in progress)
 
 **Goal:** support the actual languages of my real services.
 
@@ -92,6 +92,12 @@ store and prints the Claude Code / Cursor / Kiro wiring. Wiring a real repo (one
   when a real service needs it. Each emits the same normalized JSON; the core is untouched.
 
 **Done criteria:** a polyglot company manifest produces one unified cross-repo map.
+
+**Done so far:** Swift + Kotlin extractors via tree-sitter (ADR 0008), driven by a real need
+(RN native modules in the dogfood repo). A single repo now yields one unified map across
+TypeScript + Swift + Kotlin — 721 functions on ghost_daddy, native call graphs included, the
+core untouched (ADR 0005). Go/Python/Java remain earn-it: add each only when a real service
+needs it, the same way.
 
 ---
 
