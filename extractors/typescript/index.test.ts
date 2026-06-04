@@ -3,13 +3,12 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { extractRepo } from "./index.js";
+import { linkRepos } from "../../core/link.js";
 
 // Light test (extractors churn — ADR 0005): just confirm the extractor produces
 // the normalized shape and resolves an obvious in-repo call against the fixture.
-const fixtureRepo = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../fixtures/ts-mini",
-);
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "../../fixtures");
+const fixtureRepo = join(fixturesDir, "ts-mini");
 
 test("extracts functions, import edges, and resolved call edges", () => {
   const out = extractRepo({ repoPath: fixtureRepo, repoId: "ts-mini" });
@@ -55,4 +54,23 @@ test("extracts route and symbolic consumed endpoints", () => {
 
   // The bare-identifier `fetch(url)` inside api.ts must be filtered out.
   assert.ok(!consumes.some((c) => c.path === "url"), "bare-identifier path should be dropped");
+});
+
+test("FE consumes links to BE exposes across the cross fixture", () => {
+  const web = extractRepo({ repoPath: join(fixturesDir, "cross/web"), repoId: "web" });
+  const svc = extractRepo({ repoPath: join(fixturesDir, "cross/svc"), repoId: "svc" });
+
+  // BE exposes POST /api/orders, handler resolved to the named function.
+  const expose = svc.endpoints.exposes.find((e) => e.path === "/api/orders");
+  assert.equal(expose?.method, "POST");
+  assert.ok(expose?.handler.endsWith("handlers.ts#createOrderHandler"));
+
+  // Linking the two repos resolves the consume↔expose into a cross-repo edge.
+  const map = linkRepos([web, svc], { workspace: "x", generatedAt: "t" });
+  assert.equal(map.externalNodes.length, 0);
+  assert.equal(map.crossRepoEdges.length, 1);
+  const edge = map.crossRepoEdges[0]!;
+  assert.equal(edge.contract, "POST /api/orders");
+  assert.ok(edge.from.endsWith("orders.ts#createOrder"));
+  assert.ok(edge.to.endsWith("handlers.ts#createOrderHandler"));
 });

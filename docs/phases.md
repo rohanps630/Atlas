@@ -43,7 +43,7 @@ packs are useful in real work.
 
 ---
 
-## Phase 2 — Multi-repo & cross-repo links 🚧
+## Phase 2 — Multi-repo & cross-repo links ✅
 
 **Goal:** make the map span repos and degrade gracefully when repos are missing.
 
@@ -56,9 +56,15 @@ packs are useful in real work.
 **Done criteria:** on a 2+ repo setup, `atlas impact` correctly lists downstream consumers,
 and a missing repo shows up as `external`, not an error.
 
+**Met:** `consumes`/`exposes` extraction, the contract linker, `atlas endpoints`, and
+`atlas impact` are built. Dogfooded on `ghost_daddy` (freelance/partial-access: 29 external
+backend endpoints surfaced, no errors; `impact` lists intra-repo blast radius). Cross-repo
+resolution proven on the `fixtures/cross` FE+BE pair: a missing repo shows as `external`,
+and adding it resolves the edge automatically.
+
 ---
 
-## Phase 3 — Expose the map to agents ⬜
+## Phase 3 — Expose the map to agents 🚧
 
 **Goal:** let Claude Code / Kiro query the map on demand instead of reading files.
 

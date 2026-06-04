@@ -2,6 +2,18 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Phase 2 (slice 2b: exposes + impact)
+
+- No schema version bump: implements the already-documented v0 `exposes` shape (§2).
+- Extractor emits `exposes` (Express-style `app/router.<verb>("/path", handler)`); the
+  handler resolves to the named in-repo function node, else the registering scope.
+- `core/impact.ts`: `transitiveCallers` (cycle-safe reverse reachability over call edges).
+- New `atlas impact <symbol|file>` command: intra-repo transitive callers + cross-repo
+  downstream consumers (via the merged map).
+- Cross fixture (`fixtures/cross/{web,svc}`) verifies consume↔expose resolution end-to-end.
+- Done-criterion demonstrated: a missing repo shows as `external`; adding it resolves the
+  edge automatically; `atlas impact` lists downstream consumers across repos.
+
 ## [Unreleased] — Phase 2 (slice 2a: multi-repo scope + consumes + external nodes)
 
 - No schema version bump: implements the already-documented v0 contracts —
