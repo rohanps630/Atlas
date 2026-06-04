@@ -25,6 +25,7 @@ import {
   SCHEMA_VERSION,
   type AtlasEdge,
   type AtlasNode,
+  type ConsumedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
 
@@ -78,7 +79,9 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
     }
   }
 
-  // Pass 2: edges. Imports (module -> module) and calls (fn -> fn).
+  // Pass 2: edges + consumed endpoints. Imports (module -> module),
+  // calls (fn -> fn), and HTTP client calls (consumes).
+  const consumes: ConsumedEndpoint[] = [];
   for (const sf of sourceFiles) {
     const fromModule = fileToModuleId.get(sf.getFilePath())!;
 
@@ -97,14 +100,19 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
 
     for (const call of sf.getDescendantsOfKind(SyntaxKind.CallExpression)) {
       const fromId = enclosingId(call, declToId) ?? fromModule;
+
       const toId = resolveCallTarget(call, declToId);
-      if (!toId || toId === fromId) continue;
-      edges.push({
-        from: fromId,
-        to: toId,
-        kind: "call",
-        line: call.getStartLineNumber(),
-      });
+      if (toId && toId !== fromId) {
+        edges.push({
+          from: fromId,
+          to: toId,
+          kind: "call",
+          line: call.getStartLineNumber(),
+        });
+      }
+
+      const consume = detectConsume(call, fromId);
+      if (consume) consumes.push(consume);
     }
   }
 
@@ -114,8 +122,93 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
     generatedAt: new Date().toISOString(),
     nodes,
     edges,
-    endpoints: { consumes: [], exposes: [] },
+    endpoints: { consumes, exposes: [] },
   };
+}
+
+const HTTP_VERBS = new Set(["get", "post", "put", "delete", "patch"]);
+// An object that "looks like" an HTTP client (heuristic — the map is a hint).
+const CLIENT_RE = /api|http|client|request|axios|fetch/i;
+const PATH_KEYS = new Set(["slug", "url", "path", "route", "endpoint"]);
+
+/**
+ * Detect an HTTP client call and record it as a consumed endpoint.
+ *
+ * Handles `fetch(url, { method })`, `axios.get(url)`, `client.post(url, body)`,
+ * and the object-arg style `this.api.post({ slug, body })`. The path is taken
+ * verbatim from the path argument: a real route (starts with `/` or `http`) is
+ * `resolved: true`; anything else (e.g. `resolveSlug("auth","register")`) is a
+ * symbolic, unresolved path that the linker will leave as an `external` node.
+ */
+function detectConsume(
+  call: CallExpression,
+  fromId: string,
+): ConsumedEndpoint | undefined {
+  const callee = call.getExpression();
+  const args = call.getArguments();
+  let method: string | undefined;
+
+  if (Node.isIdentifier(callee) && callee.getText() === "fetch") {
+    method = fetchMethod(args[1]) ?? "GET";
+  } else if (Node.isPropertyAccessExpression(callee)) {
+    const verb = callee.getName().toLowerCase();
+    if (HTTP_VERBS.has(verb) && CLIENT_RE.test(callee.getExpression().getText())) {
+      method = verb.toUpperCase();
+    }
+  }
+  if (!method) return undefined;
+
+  const pathArg = pathArgument(args[0]);
+  if (!pathArg) return undefined;
+
+  const value = pathText(pathArg);
+  if (!value) return undefined;
+
+  // A symbolic path that is a bare identifier (e.g. `slug`, `url`) carries no
+  // endpoint information — it's typically a client-wrapper forwarding its arg.
+  // Drop it; the meaningful call site is the caller that supplied a real value.
+  const isRoute = /^(\/|https?:\/\/)/.test(value);
+  if (!isRoute && /^[A-Za-z_$][\w$]*$/.test(value)) return undefined;
+
+  return { method, path: value, from: fromId, line: call.getStartLineNumber() };
+}
+
+/** The expression holding the path: an object's slug/url/path prop, or arg[0]. */
+function pathArgument(arg: Node | undefined): Node | undefined {
+  if (!arg) return undefined;
+  if (Node.isObjectLiteralExpression(arg)) {
+    for (const prop of arg.getProperties()) {
+      if (Node.isPropertyAssignment(prop) && PATH_KEYS.has(prop.getName())) {
+        return prop.getInitializer();
+      }
+    }
+    return undefined;
+  }
+  return arg;
+}
+
+/** A string literal's value, or the trimmed source text of any other expr. */
+function pathText(expr: Node): string {
+  if (Node.isStringLiteral(expr)) return expr.getLiteralValue();
+  const t = expr.getText().trim();
+  // Unwrap a single quoted/template string, but leave compound expressions
+  // (e.g. `a + b`) intact so concatenations aren't mangled.
+  for (const q of ["`", "'", '"']) {
+    if (t.length >= 2 && t.startsWith(q) && t.endsWith(q)) return t.slice(1, -1);
+  }
+  return t;
+}
+
+/** Pull `method: "POST"` out of a fetch options object literal. */
+function fetchMethod(opts: Node | undefined): string | undefined {
+  if (!opts || !Node.isObjectLiteralExpression(opts)) return undefined;
+  for (const prop of opts.getProperties()) {
+    if (Node.isPropertyAssignment(prop) && prop.getName() === "method") {
+      const init = prop.getInitializer();
+      if (init && Node.isStringLiteral(init)) return init.getLiteralValue().toUpperCase();
+    }
+  }
+  return undefined;
 }
 
 /** Load a ts-morph project from the repo's tsconfig if present, else by glob. */

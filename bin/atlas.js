@@ -17,14 +17,15 @@ const COMMANDS = {
   scan:     { phase: 1, available: true,  desc: "Scan a TypeScript repo and write its topology to the store" },
   context:  { phase: 1, available: true,  desc: "Emit a focused context pack (target + callers + callees)" },
   impact:   { phase: 2, available: false, desc: "Show what a change to <target> affects (cross-repo)" },
-  endpoints:{ phase: 2, available: false, desc: "List consumed/exposed endpoints and external nodes" },
+  endpoints:{ phase: 2, available: true,  desc: "List cross-repo links and external (unmatched) endpoints" },
   mcp:      { phase: 3, available: false, desc: "Run the MCP server that serves the map to agents" },
 };
 
 // Compiled command modules live under dist/cli/ after `npm run build`.
 const ROUTES = {
-  scan:    { mod: "dist/cli/scan.js",    fn: "runScan" },
-  context: { mod: "dist/cli/context.js", fn: "runContext" },
+  scan:      { mod: "dist/cli/scan.js",      fn: "runScan" },
+  context:   { mod: "dist/cli/context.js",   fn: "runContext" },
+  endpoints: { mod: "dist/cli/endpoints.js", fn: "runEndpoints" },
 };
 
 async function route(cmd, args) {
