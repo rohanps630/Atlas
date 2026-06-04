@@ -34,6 +34,18 @@ export function runAgent(args: string[]): number {
   const ws = resolveWorkspace(parseWorkspace(args));
   if (!ws) return 1;
 
+  const { archPath, steerPath } = writeAgentFiles(ws);
+  console.error(`wrote ${archPath}`);
+  console.error(`wrote ${steerPath}`);
+  console.error(wiringInstructions(ws, steerPath));
+  return 0;
+}
+
+/**
+ * (Re)generate the agent-facing files for a workspace into the data store.
+ * Shared by `atlas agent` and `atlas refresh`. Returns the written paths.
+ */
+export function writeAgentFiles(ws: string): { archPath: string; steerPath: string } {
   const manifest = readManifest(ws);
   const topologies = readAllTopologies(ws);
   let map: MergedMap;
@@ -48,11 +60,7 @@ export function runAgent(args: string[]): number {
   const steerPath = join(dir, "atlas.steering.md");
   fs.writeFileSync(archPath, architectureMd(manifest, topologies, map), "utf8");
   fs.writeFileSync(steerPath, steeringMd(ws, manifest), "utf8");
-
-  console.error(`wrote ${archPath}`);
-  console.error(`wrote ${steerPath}`);
-  console.error(wiringInstructions(ws, steerPath));
-  return 0;
+  return { archPath, steerPath };
 }
 
 function architectureMd(m: Manifest, tops: ExtractorOutput[], map: MergedMap): string {

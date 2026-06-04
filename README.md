@@ -56,6 +56,12 @@ node bin/atlas.js mcp                # run the MCP server (stdio) for context/ca
 store and prints how to wire them into Claude Code (`@import` + `claude mcp add`), Cursor, or
 Kiro. After that the agent knows what Atlas provides and calls it without being told.
 
+The map is a snapshot, not live. After meaningful changes, refresh it in one command:
+
+```bash
+node bin/atlas.js refresh -w myapp   # re-scan all repos in the workspace, re-link, regenerate agent files
+```
+
 ## Read the docs in this order
 
 1. [`docs/vision.md`](docs/vision.md) — what this is for and where it's going (the plan).

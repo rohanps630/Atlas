@@ -20,6 +20,7 @@ const COMMANDS = {
   endpoints:{ phase: 2, available: true,  desc: "List cross-repo links and external (unmatched) endpoints" },
   mcp:      { phase: 3, available: true,  desc: "Run the MCP server that serves the map to agents (stdio)" },
   agent:    { phase: 3, available: true,  desc: "Generate agent steering + architecture.md and print wiring" },
+  refresh:  { phase: 3, available: true,  desc: "Re-scan all repos in a workspace, re-link, regenerate agent files" },
 };
 
 // Compiled command modules live under dist/cli/ after `npm run build`.
@@ -30,6 +31,7 @@ const ROUTES = {
   impact:    { mod: "dist/cli/impact.js",    fn: "runImpact" },
   mcp:       { mod: "dist/mcp/server.js",    fn: "runMcp" },
   agent:     { mod: "dist/cli/agent.js",     fn: "runAgent" },
+  refresh:   { mod: "dist/cli/refresh.js",   fn: "runRefresh" },
 };
 
 async function route(cmd, args) {
