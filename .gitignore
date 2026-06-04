@@ -1,0 +1,16 @@
+# The data store lives OUTSIDE this repo (~/.atlas) — never commit generated data.
+# This guard only catches it if someone points the store inside the repo by mistake.
+.atlas/
+*.local.json
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
