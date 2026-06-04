@@ -4,3 +4,4 @@
 declare module "tree-sitter";
 declare module "tree-sitter-swift";
 declare module "tree-sitter-kotlin";
+declare module "tree-sitter-go";

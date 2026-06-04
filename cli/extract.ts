@@ -10,6 +10,7 @@
 
 import { extractRepo } from "../extractors/typescript/index.js";
 import { extractNative, type NativeLanguage } from "../extractors/native/index.js";
+import { extractGo } from "../extractors/go/index.js";
 import type { ExtractorOutput } from "../core/schema.js";
 
 export interface RepoExtraction {
@@ -32,6 +33,13 @@ export function extractRepoAll(repoPath: string, repoId: string): RepoExtraction
       outputs.push(out);
       perLanguage.push({ language, functions });
     }
+  }
+
+  const go = extractGo({ repoPath, repoId });
+  const goFns = fnCount(go);
+  if (goFns > 0) {
+    outputs.push(go);
+    perLanguage.push({ language: "go", functions: goFns });
   }
 
   return { output: merge(outputs), perLanguage };

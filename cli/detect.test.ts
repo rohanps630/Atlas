@@ -9,6 +9,7 @@ function ev(partial: Partial<Evidence>): Evidence {
     exts: new Set(),
     isPackage: false,
     monorepo: false,
+    goModules: [],
     ...partial,
   };
 }
@@ -53,9 +54,18 @@ test("plain scripts dir → tool", () => {
   assert.equal(d.role, "tool");
 });
 
+test("Go chi backend → be with go language", () => {
+  const d = inferStack(
+    ev({ rootFiles: new Set(["go.mod"]), exts: new Set([".go"]), goModules: ["github.com/go-chi/chi/v5"] }),
+  );
+  assert.equal(d.role, "be");
+  assert.ok(d.languages.includes("go"));
+  assert.ok(d.frameworks.includes("chi"));
+});
+
 test("non-extractable language reported, not claimed", () => {
-  const d = inferStack(ev({ rootFiles: new Set(["go.mod"]) }));
-  assert.ok(d.languages.some((l) => l.startsWith("go (no extractor")));
+  const d = inferStack(ev({ rootFiles: new Set(["pom.xml"]) }));
+  assert.ok(d.languages.some((l) => l.startsWith("java (no extractor")));
 });
 
 test("monorepo signal → company type", () => {

@@ -4,8 +4,8 @@ A personal, local-first tool that gives AI coding agents the one thing they can'
 cheaply discover on their own: **a map of the whole system across repositories.**
 
 > Status: **Phase 4 in progress** — on top of multi-repo workspaces, FE↔backend contract
-> linking, cross-repo impact, and the MCP server + steering file, Atlas now also extracts
-> Swift & Kotlin (native modules) into the same map. See [`docs/phases.md`](docs/phases.md).
+> linking, cross-repo impact, and the MCP server + steering file, Atlas extracts TypeScript,
+> Swift, Kotlin, and Go (incl. chi routes) into one polyglot map. See [`docs/phases.md`](docs/phases.md).
 
 ---
 

@@ -26,7 +26,17 @@ export interface Evidence {
   exts: Set<string>; // source extensions present anywhere (e.g. ".ts", ".swift")
   isPackage: boolean; // has a package.json with main/exports and not private
   monorepo: boolean; // workspaces / turbo / nx / lerna / pnpm-workspace
+  goModules: string[]; // module import paths from go.mod (for backend frameworks)
 }
+
+// Go web frameworks (module path substring → display name) → imply a backend.
+const GO_FRAMEWORKS: { name: string; match: string }[] = [
+  { name: "chi", match: "go-chi/chi" },
+  { name: "Gin", match: "gin-gonic/gin" },
+  { name: "Echo", match: "labstack/echo" },
+  { name: "Fiber", match: "gofiber/fiber" },
+  { name: "gorilla/mux", match: "gorilla/mux" },
+];
 
 // Curated dep/config → framework signals.
 const FE_FRAMEWORKS: { name: string; dep?: string; file?: string }[] = [
@@ -67,6 +77,9 @@ export function inferStack(e: Evidence): DetectionResult {
   for (const f of BE_FRAMEWORKS) {
     if (e.deps[f.dep]) add(f.name, `dep:${f.dep}`);
   }
+  for (const f of GO_FRAMEWORKS) {
+    if (e.goModules.some((m) => m.includes(f.match))) add(f.name, `go:${f.match}`);
+  }
 
   // Languages we can extract.
   const languages: string[] = [];
@@ -77,10 +90,10 @@ export function inferStack(e: Evidence): DetectionResult {
   }
   if (e.exts.has(".swift")) languages.push("swift");
   if (e.exts.has(".kt")) languages.push("kotlin");
+  if (e.exts.has(".go") || e.rootFiles.has("go.mod")) languages.push("go");
 
   // Languages present but not yet extractable — reported, not claimed.
   for (const [file, lang] of [
-    ["go.mod", "go"],
     ["requirements.txt", "python"],
     ["pyproject.toml", "python"],
     ["pom.xml", "java"],
@@ -108,7 +121,7 @@ export function inferStack(e: Evidence): DetectionResult {
 const IGNORE_DIRS = new Set([
   "node_modules", "Pods", "build", ".gradle", "DerivedData", "dist", ".git", ".expo", "Carthage",
 ]);
-const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".swift", ".kt"]);
+const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".swift", ".kt", ".go"]);
 
 export function detectStack(repoPath: string): DetectionResult {
   const root = path.resolve(repoPath);
@@ -134,7 +147,20 @@ export function detectStack(repoPath: string): DetectionResult {
 
   const exts = collectExts(root);
 
-  return inferStack({ deps, rootFiles, exts, isPackage, monorepo });
+  let goModules: string[] = [];
+  if (rootFiles.has("go.mod")) {
+    try {
+      goModules = fs
+        .readFileSync(path.join(root, "go.mod"), "utf8")
+        .split("\n")
+        .map((l) => l.trim().split(/\s+/)[0] ?? "")
+        .filter((m) => m.includes("/"));
+    } catch {
+      goModules = [];
+    }
+  }
+
+  return inferStack({ deps, rootFiles, exts, isPackage, monorepo, goModules });
 }
 
 // --- evidence helpers ---
