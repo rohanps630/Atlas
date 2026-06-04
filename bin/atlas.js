@@ -18,7 +18,8 @@ const COMMANDS = {
   context:  { phase: 1, available: true,  desc: "Emit a focused context pack (target + callers + callees)" },
   impact:   { phase: 2, available: true,  desc: "Show what a change to <target> affects (intra + cross-repo)" },
   endpoints:{ phase: 2, available: true,  desc: "List cross-repo links and external (unmatched) endpoints" },
-  mcp:      { phase: 3, available: false, desc: "Run the MCP server that serves the map to agents" },
+  mcp:      { phase: 3, available: true,  desc: "Run the MCP server that serves the map to agents (stdio)" },
+  agent:    { phase: 3, available: true,  desc: "Generate agent steering + architecture.md and print wiring" },
 };
 
 // Compiled command modules live under dist/cli/ after `npm run build`.
@@ -27,6 +28,8 @@ const ROUTES = {
   context:   { mod: "dist/cli/context.js",   fn: "runContext" },
   endpoints: { mod: "dist/cli/endpoints.js", fn: "runEndpoints" },
   impact:    { mod: "dist/cli/impact.js",    fn: "runImpact" },
+  mcp:       { mod: "dist/mcp/server.js",    fn: "runMcp" },
+  agent:     { mod: "dist/cli/agent.js",     fn: "runAgent" },
 };
 
 async function route(cmd, args) {
