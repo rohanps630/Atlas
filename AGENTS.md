@@ -37,15 +37,21 @@ Write a new ADR in `docs/adr/` (next number, `Proposed` status) describing conte
 and consequences. Link it from `docs/adr/README.md`. Only then implement.
 
 ## Current state
-Phase 1 is complete and dogfooded: the owner confirmed `atlas context` output is useful in
-real work on `ghost_daddy`. Shipped: TypeScript build/test toolchain, the ts-morph extractor
-(functions, module nodes, import + call edges), a pure intra-repo `core` graph, and the
-`atlas scan` / `atlas context` commands. **The current task is Phase 2** — manifest format,
-the `~/.atlas` data store layout, endpoint extraction (`consumes`/`exposes`), the cross-repo
-linker (`external` nodes for unmatched consumers), and `atlas impact`.
+Phases 1 and 2 are complete and dogfooded on `ghost_daddy`. Shipped: TypeScript build/test
+toolchain; the ts-morph extractor (functions, module nodes, import/call edges, `consumes` +
+`exposes`); a pure `core` (graph, cross-repo linker, impact); per-workspace data store with a
+manifest; and commands `scan`, `context`, `endpoints`, `impact`. Cross-repo resolution is
+verified by the `fixtures/cross` FE+BE pair (a missing repo degrades to `external` and
+resolves when added).
 
-Build/run: `npm install && npm run build`, then `node bin/atlas.js scan <repo>` and
-`node bin/atlas.js context <symbol|file>`. Tests: `npm test`.
+**The current task is Phase 3** — expose the map to agents: an MCP server
+(`context`/`callers`/`impact`/`endpoints`), a greppable `architecture.md`/`topology.json`,
+and an always-on steering/patterns file so a coding agent uses Atlas without being told.
+Generated agent-facing artifacts go to the data store (`~/.atlas/<ws>/`), never into target
+repos (ADR 0003).
+
+Build/run: `npm install && npm run build`, then `node bin/atlas.js <scan|context|endpoints|impact>`.
+Tests: `npm test`.
 
 ## Conventions
 - CLI entry: `bin/atlas.js` (stub). Commands route to `cli/`.

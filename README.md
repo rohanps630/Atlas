@@ -3,9 +3,9 @@
 A personal, local-first tool that gives AI coding agents the one thing they can't
 cheaply discover on their own: **a map of the whole system across repositories.**
 
-> Status: **Phase 1** — single-repo core: scan a TypeScript repo and read a focused
-> context pack (a symbol + its callers + callees). See [`docs/phases.md`](docs/phases.md)
-> for what's built and what's next.
+> Status: **Phase 2 complete** — multi-repo workspaces, FE↔backend contract linking,
+> `external` nodes for missing repos, and cross-repo impact analysis. See
+> [`docs/phases.md`](docs/phases.md) for what's built and what's next.
 
 ---
 
@@ -37,6 +37,7 @@ node bin/atlas.js scan /path/to/a/ts-repo -w myapp --role fe
 
 node bin/atlas.js context createOrder -w myapp    # a symbol + its callers + callees
 node bin/atlas.js context src/orders/api.ts -w myapp   # or a file → its functions
+node bin/atlas.js impact createOrder -w myapp     # what breaks: callers (intra) + consumers (cross-repo)
 node bin/atlas.js endpoints -w myapp              # cross-repo links + external endpoints
 ```
 

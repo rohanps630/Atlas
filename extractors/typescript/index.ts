@@ -26,6 +26,7 @@ import {
   type AtlasEdge,
   type AtlasNode,
   type ConsumedEndpoint,
+  type ExposedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
 
@@ -79,9 +80,10 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
     }
   }
 
-  // Pass 2: edges + consumed endpoints. Imports (module -> module),
-  // calls (fn -> fn), and HTTP client calls (consumes).
+  // Pass 2: edges + endpoints. Imports (module -> module), calls (fn -> fn),
+  // HTTP client calls (consumes), and route registrations (exposes).
   const consumes: ConsumedEndpoint[] = [];
+  const exposes: ExposedEndpoint[] = [];
   for (const sf of sourceFiles) {
     const fromModule = fileToModuleId.get(sf.getFilePath())!;
 
@@ -113,6 +115,9 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
 
       const consume = detectConsume(call, fromId);
       if (consume) consumes.push(consume);
+
+      const expose = detectExpose(call, fromId, declToId);
+      if (expose) exposes.push(expose);
     }
   }
 
@@ -122,13 +127,15 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
     generatedAt: new Date().toISOString(),
     nodes,
     edges,
-    endpoints: { consumes, exposes: [] },
+    endpoints: { consumes, exposes },
   };
 }
 
 const HTTP_VERBS = new Set(["get", "post", "put", "delete", "patch"]);
 // An object that "looks like" an HTTP client (heuristic — the map is a hint).
 const CLIENT_RE = /api|http|client|request|axios|fetch/i;
+// An object that "looks like" a server/router registering routes.
+const SERVER_RE = /app|router|server|express|route/i;
 const PATH_KEYS = new Set(["slug", "url", "path", "route", "endpoint"]);
 
 /**
@@ -206,6 +213,80 @@ function fetchMethod(opts: Node | undefined): string | undefined {
     if (Node.isPropertyAssignment(prop) && prop.getName() === "method") {
       const init = prop.getInitializer();
       if (init && Node.isStringLiteral(init)) return init.getLiteralValue().toUpperCase();
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Detect a route registration and record it as an exposed endpoint.
+ *
+ * Handles the Express family: `app.get("/path", handler)`,
+ * `router.post("/path", mw, handler)`. Requires a server/router-like object, a
+ * string-literal path, and a handler argument. The handler resolves to an
+ * in-repo function node when it's a named reference, else to the enclosing
+ * function/module where the route is registered.
+ */
+function detectExpose(
+  call: CallExpression,
+  fromId: string,
+  declToId: Map<Node, string>,
+): ExposedEndpoint | undefined {
+  const callee = call.getExpression();
+  if (!Node.isPropertyAccessExpression(callee)) return undefined;
+
+  const verb = callee.getName().toLowerCase();
+  if (!HTTP_VERBS.has(verb)) return undefined;
+
+  const objText = callee.getExpression().getText();
+  if (!SERVER_RE.test(objText) || CLIENT_RE.test(objText)) return undefined;
+
+  const args = call.getArguments();
+  const first = args[0];
+  if (!first || !Node.isStringLiteral(first)) return undefined; // need a literal route
+  const path = first.getLiteralValue();
+  if (!path.startsWith("/")) return undefined;
+
+  // The handler is the last function/identifier argument (after path + middleware).
+  let handler = fromId;
+  for (let i = args.length - 1; i >= 1; i--) {
+    const a = args[i]!;
+    if (Node.isIdentifier(a)) {
+      const resolved = resolveIdentifierTarget(a, declToId);
+      if (resolved) {
+        handler = resolved;
+        break;
+      }
+    } else if (Node.isArrowFunction(a) || Node.isFunctionExpression(a)) {
+      // inline handler — attribute to where the route is registered (fromId)
+      break;
+    }
+  }
+
+  return { method: verb.toUpperCase(), path, handler, line: call.getStartLineNumber() };
+}
+
+/** Resolve an identifier (e.g. a handler reference) to an in-repo node id. */
+function resolveIdentifierTarget(
+  id: Node,
+  declToId: Map<Node, string>,
+): string | undefined {
+  let symbol;
+  try {
+    symbol = id.getSymbol();
+    if (symbol) symbol = symbol.getAliasedSymbol() ?? symbol;
+  } catch {
+    return undefined;
+  }
+  if (!symbol) return undefined;
+  for (const decl of symbol.getDeclarations()) {
+    const direct = declToId.get(decl);
+    if (direct) return direct;
+    let parent: Node | undefined = decl.getParent();
+    while (parent) {
+      const pid = declToId.get(parent);
+      if (pid) return pid;
+      parent = parent.getParent();
     }
   }
   return undefined;
