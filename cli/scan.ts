@@ -10,7 +10,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { extractRepo } from "../extractors/typescript/index.js";
+import { extractRepoAll } from "./extract.js";
 import { linkRepos } from "../core/link.js";
 import type { Manifest, RepoEntry, RepoRole, WorkspaceType } from "../core/schema.js";
 import {
@@ -51,16 +51,16 @@ export function runScan(args: string[]): number {
 
   console.error(`scanning ${abs} as "${id}" (workspace "${workspace}", role ${role}) …`);
   const start = Date.now();
-  const output = extractRepo({ repoPath: abs, repoId: id });
+  const { output, perLanguage } = extractRepoAll(abs, id);
   writeTopology(workspace, output);
   const ms = Date.now() - start;
 
   const fns = output.nodes.filter((n) => n.kind === "function").length;
   const calls = output.edges.filter((e) => e.kind === "call").length;
-  const imports = output.edges.filter((e) => e.kind === "import").length;
   const consumes = output.endpoints.consumes.length;
+  const langs = perLanguage.map((l) => `${l.language} ${l.functions}`).join(", ");
   console.error(
-    `done in ${ms}ms: ${fns} functions, ${calls} calls, ${imports} imports, ${consumes} consumes`,
+    `done in ${ms}ms: ${fns} functions (${langs}), ${calls} calls, ${consumes} consumes`,
   );
 
   // Re-link the whole workspace and write the merged map.

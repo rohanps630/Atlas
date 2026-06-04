@@ -3,9 +3,9 @@
 A personal, local-first tool that gives AI coding agents the one thing they can't
 cheaply discover on their own: **a map of the whole system across repositories.**
 
-> Status: **Phase 3 complete** — multi-repo workspaces, FE↔backend contract linking,
-> cross-repo impact, and an MCP server + steering file so coding agents use the map
-> automatically. See [`docs/phases.md`](docs/phases.md) for what's built and what's next.
+> Status: **Phase 4 in progress** — on top of multi-repo workspaces, FE↔backend contract
+> linking, cross-repo impact, and the MCP server + steering file, Atlas now also extracts
+> Swift & Kotlin (native modules) into the same map. See [`docs/phases.md`](docs/phases.md).
 
 ---
 
@@ -42,8 +42,9 @@ node bin/atlas.js endpoints -w myapp              # cross-repo links + external 
 ```
 
 `scan` reads each repo (never modifies it) and writes only to `~/.atlas/<workspace>/`
-(override the store root with `ATLAS_HOME`). With a single workspace/repo, `-w` and
-`--repo` can be omitted. `npm test` runs the core + extractor tests.
+(override the store root with `ATLAS_HOME`). It auto-detects languages: TypeScript/JS plus
+any Swift/Kotlin native modules, all merged into one map. With a single workspace/repo, `-w`
+and `--repo` can be omitted. `npm test` runs the core + extractor tests.
 
 ### Make a coding agent use Atlas automatically
 

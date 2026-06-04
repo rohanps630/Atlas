@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "atlas": "node bin/atlas.js",
-    "test": "tsx --test core/*.test.ts extractors/typescript/*.test.ts",
+    "test": "tsx --test core/*.test.ts extractors/typescript/*.test.ts extractors/native/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
@@ -17,6 +17,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-kotlin": "^0.3.8",
+    "tree-sitter-swift": "^0.7.1",
     "ts-morph": "^25.0.1"
   },
   "devDependencies": {

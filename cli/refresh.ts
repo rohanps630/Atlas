@@ -9,7 +9,7 @@
  */
 
 import * as fs from "node:fs";
-import { extractRepo } from "../extractors/typescript/index.js";
+import { extractRepoAll } from "./extract.js";
 import { linkRepos } from "../core/link.js";
 import { readAllTopologies, readManifest, writeMap, writeTopology } from "./store.js";
 import { writeAgentFiles } from "./agent.js";
@@ -32,11 +32,12 @@ export function runRefresh(args: string[]): number {
       console.error(`  skip ${r.id} — path no longer exists: ${r.path}`);
       continue;
     }
-    const out = extractRepo({ repoPath: r.path, repoId: r.id });
+    const { output: out, perLanguage } = extractRepoAll(r.path, r.id);
     writeTopology(ws, out);
     scanned++;
+    const langs = perLanguage.map((l) => `${l.language} ${l.functions}`).join(", ");
     console.error(
-      `  scanned ${r.id}: ${out.nodes.filter((n) => n.kind === "function").length} functions, ` +
+      `  scanned ${r.id}: ${out.nodes.filter((n) => n.kind === "function").length} functions (${langs}), ` +
         `${out.endpoints.consumes.length} consumes, ${out.endpoints.exposes.length} exposes`,
     );
   }

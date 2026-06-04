@@ -50,12 +50,18 @@ Phase 3 is also built: `atlas mcp` (MCP server exposing `context`/`callers`/`imp
 Generated artifacts stay in `~/.atlas/<ws>/`; only a one-line import goes into a target repo's
 CLAUDE.md, added by the owner.
 
-**The next task is Phase 4** — add language extractors (Go, Python, Java) one at a time, only
-when a real service needs one. Each emits the same normalized JSON; the core is untouched.
-Do not build any Phase 5 audit/report feature without a superseding ADR (see docs/rejected.md).
+Phase 4 is in progress: Swift + Kotlin extractors (tree-sitter, ADR 0008) now run
+automatically during `scan`/`refresh` and merge into the repo's topology, so `context`/
+`impact` and the MCP server cover native modules too. `cli/extract.ts` orchestrates the
+per-repo, multi-language extraction.
+
+**Next:** add further language extractors (Go via `go list`, Python via `ast`, Java) one at a
+time, only when a real service needs one — each emits the same normalized JSON; the core is
+untouched (ADR 0005). Do not build any Phase 5 audit/report feature without a superseding ADR
+(see docs/rejected.md).
 
 Build/run: `npm install && npm run build`, then
-`node bin/atlas.js <scan|context|endpoints|impact|agent|mcp>`. Tests: `npm test`.
+`node bin/atlas.js <scan|context|endpoints|impact|agent|mcp|refresh>`. Tests: `npm test`.
 
 ## Conventions
 - CLI entry: `bin/atlas.js` (stub). Commands route to `cli/`.

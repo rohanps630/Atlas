@@ -2,6 +2,22 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Phase 4 (Swift + Kotlin extractors)
+
+- No schema change: native output uses the existing v0 node/edge shapes.
+- ADR 0008: Swift & Kotlin extractors via tree-sitter (one generic extractor, both grammars).
+- `extractors/native`: emits `module` + `function` nodes and name-resolved `call` edges for
+  `.swift` and `.kt`; qualifies methods as `Class.method`; resolves calls by unique short
+  name within the repo (ambiguous → skipped); parses large files via a sized tree-sitter
+  buffer and skips any unparseable file (graceful degradation).
+- `cli/extract.ts`: per-repo orchestration — runs TS + auto-detected Swift/Kotlin and merges
+  into one topology. `scan` and `refresh` both use it, so native code appears in `context`/
+  `impact` and via the MCP server with no core changes (ADR 0005).
+- `.npmrc` pins `legacy-peer-deps=true` (the grammar packages' tree-sitter peer ranges differ
+  but are ABI-compatible — ADR 0008).
+- Dogfooded on ghost_daddy: 721 functions (TS 344, Swift 181, Kotlin 196); native call graphs
+  resolve across files (e.g. `NativeScreenView.initializeComponents` → its helpers).
+
 ## [Unreleased] — Phase 3 (expose the map to agents)
 
 - No schema change.
