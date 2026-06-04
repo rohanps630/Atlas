@@ -45,7 +45,16 @@ export interface AtlasEdge {
   line: number;
 }
 
-/** HTTP endpoint a repo consumes (FE client call). Phase 2. */
+/**
+ * HTTP endpoint a repo consumes (FE client call). Phase 2.
+ *
+ * `path` may be a real route (`/api/orders/:id`) when statically resolvable, or
+ * a *symbolic* expression (e.g. `resolveSlug("auth","register")`) when the path
+ * is indirected through a registry/helper. The linker treats only real routes
+ * as matchable; symbolic paths never match an `exposes` and stay `external`
+ * (principle #4/#5). Whether a path is matchable is derived by the core, not
+ * stored — so this shape stays exactly as documented in schema.md §2.
+ */
 export interface ConsumedEndpoint {
   method: string;
   path: string;
@@ -77,4 +86,53 @@ export interface ExtractorOutput {
   nodes: AtlasNode[];
   edges: AtlasEdge[];
   endpoints: Endpoints;
+}
+
+// ---------------------------------------------------------------------------
+// docs/schema.md §1 — Manifest (defines scope, one per workspace)
+// ---------------------------------------------------------------------------
+
+export type WorkspaceType = "freelance" | "company";
+export type RepoRole = "fe" | "be" | "lib" | "tool";
+
+export interface RepoEntry {
+  id: string;
+  path: string;
+  role: RepoRole;
+  language: string;
+}
+
+export interface Manifest {
+  schemaVersion: number;
+  workspace: string;
+  type: WorkspaceType;
+  repos: RepoEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// docs/schema.md §3 — Merged map (produced by the core)
+// ---------------------------------------------------------------------------
+
+/** A resolved FE consume ↔ BE expose link, matched by HTTP contract. */
+export interface CrossRepoEdge {
+  from: string;
+  to: string;
+  kind: "http";
+  contract: string;
+}
+
+/** A consumed endpoint with no exposing repo in the manifest (NOT an error). */
+export interface ExternalNode {
+  id: string;
+  reason: string;
+  consumedBy: string[];
+}
+
+export interface MergedMap {
+  schemaVersion: number;
+  workspace: string;
+  generatedAt: string;
+  repos: string[];
+  crossRepoEdges: CrossRepoEdge[];
+  externalNodes: ExternalNode[];
 }

@@ -36,3 +36,23 @@ test("extracts functions, import edges, and resolved call edges", () => {
   );
   assert.ok(hasImport, "expected orders.ts -> http.ts import edge");
 });
+
+test("extracts route and symbolic consumed endpoints", () => {
+  const out = extractRepo({ repoPath: fixtureRepo, repoId: "ts-mini" });
+  const consumes = out.endpoints.consumes;
+
+  // api.post("/api/users", ...) → POST /api/users (a real route)
+  const createUser = consumes.find((c) => c.method === "POST" && c.path === "/api/users");
+  assert.ok(createUser, "expected POST /api/users");
+
+  // api.get(`/api/users/${id}`) → GET with a template route
+  const getUser = consumes.find((c) => c.method === "GET" && c.path.includes("/api/users/"));
+  assert.ok(getUser, "expected GET /api/users/...");
+
+  // api.get(resolveSlug("user","me")) → symbolic path recorded verbatim
+  const symbolic = consumes.find((c) => c.path.includes("resolveSlug"));
+  assert.ok(symbolic, "expected a symbolic consume");
+
+  // The bare-identifier `fetch(url)` inside api.ts must be filtered out.
+  assert.ok(!consumes.some((c) => c.path === "url"), "bare-identifier path should be dropped");
+});

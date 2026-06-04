@@ -37,14 +37,12 @@ Write a new ADR in `docs/adr/` (next number, `Proposed` status) describing conte
 and consequences. Link it from `docs/adr/README.md`. Only then implement.
 
 ## Current state
-Phase 1 is implemented and dogfooded (pending owner sign-off that the output is used in
-daily work): TypeScript build/test toolchain, the ts-morph extractor (functions, module
-nodes, import + call edges), a pure intra-repo `core` graph, and the `atlas scan` /
-`atlas context` commands. Verified on a real ~266-file repo (scan ~1.5s; `context` returns
-correct callers/callees). **The next task is Phase 2** — manifest format, the `~/.atlas`
-data store layout, endpoint extraction (`consumes`/`exposes`), the cross-repo linker
-(`external` nodes for unmatched consumers), and `atlas impact`. Do not start Phase 2 work
-until the owner confirms Phase 1 is in real use.
+Phase 1 is complete and dogfooded: the owner confirmed `atlas context` output is useful in
+real work on `ghost_daddy`. Shipped: TypeScript build/test toolchain, the ts-morph extractor
+(functions, module nodes, import + call edges), a pure intra-repo `core` graph, and the
+`atlas scan` / `atlas context` commands. **The current task is Phase 2** — manifest format,
+the `~/.atlas` data store layout, endpoint extraction (`consumes`/`exposes`), the cross-repo
+linker (`external` nodes for unmatched consumers), and `atlas impact`.
 
 Build/run: `npm install && npm run build`, then `node bin/atlas.js scan <repo>` and
 `node bin/atlas.js context <symbol|file>`. Tests: `npm test`.

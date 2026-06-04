@@ -27,19 +27,22 @@ The agent brings the search; this tool brings the map.
 3. **Everything is local.** Nothing leaves the machine; there is no index to leak.
    See [ADR 0006](docs/adr/0006-local-only-no-network.md).
 
-## Quickstart (Phase 1)
+## Quickstart
 
 ```bash
 npm install && npm run build
 
-node bin/atlas.js scan /path/to/a/ts-repo        # → ~/.atlas/<repo>.topology.json
-node bin/atlas.js context createOrder            # a symbol + its callers + callees
-node bin/atlas.js context src/orders/api.ts      # or a file → its functions
-node bin/atlas.js context createOrder --json     # machine-readable pack
+# scan one or more repos into a workspace (re-link runs automatically)
+node bin/atlas.js scan /path/to/a/ts-repo -w myapp --role fe
+
+node bin/atlas.js context createOrder -w myapp    # a symbol + its callers + callees
+node bin/atlas.js context src/orders/api.ts -w myapp   # or a file → its functions
+node bin/atlas.js endpoints -w myapp              # cross-repo links + external endpoints
 ```
 
-`scan` reads the repo (never modifies it) and writes topology only to `~/.atlas`
-(override with `ATLAS_HOME`). `npm test` runs the core + extractor tests.
+`scan` reads each repo (never modifies it) and writes only to `~/.atlas/<workspace>/`
+(override the store root with `ATLAS_HOME`). With a single workspace/repo, `-w` and
+`--repo` can be omitted. `npm test` runs the core + extractor tests.
 
 ## Read the docs in this order
 

@@ -79,6 +79,12 @@ sees source code, only this.
 A whole-file (`module`) node has no symbol, so its id omits the suffix:
 `<repoId>:<relativeFile>`. `import` edges connect these module nodes (file → file).
 
+**Consume `path` may be symbolic.** When a client call's path is statically resolvable it's
+a real route (`/api/orders/:id`); when it's indirected through a registry/helper the extractor
+records the expression verbatim (e.g. `resolveSlug("auth","register")`). The core treats only
+real routes as matchable — symbolic paths never link and stay `external` (principle #4/#5).
+Whether a path is matchable is derived by the core, not stored, so the shape above is unchanged.
+
 ---
 
 ## 3. Merged map — produced by the core

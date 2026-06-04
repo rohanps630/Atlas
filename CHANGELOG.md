@@ -2,6 +2,21 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Phase 2 (slice 2a: multi-repo scope + consumes + external nodes)
+
+- No schema version bump: implements the already-documented v0 contracts —
+  manifest (§1), `consumes` endpoints (§2), and the merged map (§3).
+- Schema **clarification** (shape unchanged): `consumes.path` may be a real route or a
+  *symbolic* expression; matchability is derived by the core, not stored.
+- Data store moves to a per-workspace layout: `~/.atlas/<workspace>/{manifest,<repo>.topology,map}.json`.
+- `atlas scan` now takes `--workspace`/`--role`/`--type`, upserts the repo into the
+  workspace manifest, and re-links the workspace into `map.json` after extracting.
+- Extractor emits `consumes` (HTTP client calls; symbolic paths kept verbatim, bare-identifier
+  paths dropped). `exposes` still pending (slice 2b).
+- `core/link.ts`: cross-repo linker matches `consumes`↔`exposes` by HTTP contract
+  (method + param-normalized path) and emits `external` nodes for unmatched consumes.
+- New `atlas endpoints` command lists cross-repo links and external (unmatched) endpoints.
+
 ## [Unreleased] — Phase 1
 
 - Schema **clarification** (no version bump; shape unchanged, `schemaVersion` stays 0):

@@ -23,7 +23,7 @@ build next without further explanation.
 
 ---
 
-## Phase 1 — Single-repo core 🚧 (the first *useful* version)
+## Phase 1 — Single-repo core ✅ (the first *useful* version)
 
 **Goal:** scan one TypeScript repo and produce one thing I read while working.
 
@@ -38,9 +38,12 @@ build next without further explanation.
 **Done criteria:** I run `atlas context` on a real repo and actually use the output. **Dogfood
 within the first week or the project is not alive.**
 
+**Met:** dogfooded on `ghost_daddy` (~266-file Expo/RN app); owner confirmed the context
+packs are useful in real work.
+
 ---
 
-## Phase 2 — Multi-repo & cross-repo links ⬜
+## Phase 2 — Multi-repo & cross-repo links 🚧
 
 **Goal:** make the map span repos and degrade gracefully when repos are missing.
 
