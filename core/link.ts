@@ -20,10 +20,13 @@ import type {
  * `/api/orders/:id` matches a BE's `/api/orders/{id}`. Both collapse to `{}`.
  */
 export function normalizePath(path: string): string {
-  return path
+  const collapsed = path
     .replace(/\$\{[^}]*\}/g, "{}") // template `${x}`
     .replace(/:[^/]+/g, "{}") // express `:id`
     .replace(/\{[^/}]+\}/g, "{}"); // brace `{id}`
+  // Trailing slash is not significant for matching (chi's `/` leaf under a
+  // prefix == the prefix); strip it, but keep root "/" intact.
+  return collapsed.length > 1 ? collapsed.replace(/\/+$/, "") : collapsed;
 }
 
 /** The contract key two repos must agree on to link. */

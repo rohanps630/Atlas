@@ -95,10 +95,11 @@ store and prints the Claude Code / Cursor / Kiro wiring. Wiring a real repo (one
 
 **Done so far:** Swift + Kotlin extractors via tree-sitter (ADR 0008), and a Go extractor
 with chi route extraction (ADR 0010) — each driven by a real service. A single repo yields one
-unified map across TypeScript + Swift + Kotlin (721 functions on ghost_daddy), and a polyglot
-workspace links across languages: the HMS Next.js frontend ↔ the Go/chi backend resolved 7
-cross-repo HTTP contracts, with `atlas impact` spanning TS↔Go. The core is untouched (ADR 0005).
-Python/Java remain earn-it: add each only when a real service needs it, the same way.
+unified map across TypeScript + Swift + Kotlin (721 functions on ghost_daddy), and the HMS
+workspace spans **3 repos / 3 languages**: the Next.js admin (TS) and the Android app
+(Kotlin/Retrofit) both link to the Go/chi backend — 21 cross-repo HTTP contracts, with
+`atlas impact` spanning the languages. The core is untouched (ADR 0005). Python/Java remain
+earn-it: add each only when a real service needs it, the same way.
 
 ---
 

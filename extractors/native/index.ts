@@ -19,8 +19,11 @@ import {
   SCHEMA_VERSION,
   type AtlasEdge,
   type AtlasNode,
+  type ConsumedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
+
+const RETROFIT_VERBS = new Set(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]);
 
 export type NativeLanguage = "swift" | "kotlin";
 
@@ -50,6 +53,8 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
   const byShortName = new Map<string, string[]>(); // short fn name -> node ids
   // Per file: the parse tree + a map from function_declaration node id -> our node id.
   const perFile: { rel: string; root: any; fdToId: Map<number, string> }[] = [];
+  // Kotlin `(const) val NAME = "..."` map (short name -> raw value, may contain ${...}).
+  const constMap = new Map<string, string>();
 
   // Pass 1: nodes.
   for (const file of files) {
@@ -60,7 +65,9 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
       takenIds.add(moduleId);
     }
 
-    const tree = parseFile(parser, fs.readFileSync(file, "utf8"), rel);
+    const src = fs.readFileSync(file, "utf8");
+    if (opts.language === "kotlin") collectConsts(src, constMap);
+    const tree = parseFile(parser, src, rel);
     if (!tree) continue; // unparseable file — skip, don't fail the whole scan
     const fdToId = new Map<number, string>();
     for (const fd of descendants(tree.rootNode, "function_declaration")) {
@@ -90,14 +97,86 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
     }
   }
 
+  // Pass 3 (Kotlin only): Retrofit `consumes` from @GET/@POST/... annotations.
+  const consumes: ConsumedEndpoint[] = [];
+  if (opts.language === "kotlin") {
+    const resolveConst = makeConstResolver(constMap);
+    for (const { root: fileRoot, fdToId } of perFile) {
+      for (const fd of descendants(fileRoot, "function_declaration")) {
+        const c = retrofitConsume(fd, fdToId, resolveConst);
+        if (c) consumes.push(c);
+      }
+    }
+  }
+
   return {
     schemaVersion: SCHEMA_VERSION,
     repo: opts.repoId,
     generatedAt: new Date().toISOString(),
     nodes,
     edges,
-    endpoints: { consumes: [], exposes: [] },
+    endpoints: { consumes, exposes: [] },
   };
+}
+
+/** Collect Kotlin `(const) val NAME = "literal"` into a name -> raw-value map. */
+function collectConsts(src: string, into: Map<string, string>): void {
+  const re = /\bval\s+([A-Za-z_]\w*)\s*=\s*"([^"]*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    if (!into.has(m[1]!)) into.set(m[1]!, m[2]!);
+  }
+}
+
+/** Resolve a const name to its string, substituting `${X.Y}` references. */
+function makeConstResolver(constMap: Map<string, string>): (name: string) => string | undefined {
+  const cache = new Map<string, string | undefined>();
+  const resolve = (name: string): string | undefined => {
+    if (cache.has(name)) return cache.get(name);
+    cache.set(name, undefined); // cycle guard
+    const raw = constMap.get(name);
+    if (raw === undefined) return undefined;
+    const out = raw.replace(/\$\{([\w.]+)\}/g, (_, ref: string) => resolve(lastSegment(ref)) ?? "");
+    cache.set(name, out);
+    return out;
+  };
+  return resolve;
+}
+
+/** A Retrofit-annotated interface method → a consumed endpoint, else undefined. */
+function retrofitConsume(
+  fd: any,
+  fdToId: Map<number, string>,
+  resolveConst: (name: string) => string | undefined,
+): ConsumedEndpoint | undefined {
+  const modifiers = firstChildOfType(fd, "modifiers");
+  if (!modifiers) return undefined;
+  for (const ann of descendants(modifiers, "constructor_invocation")) {
+    const verb = firstChildOfType(ann, "user_type")?.text?.toUpperCase();
+    if (!verb || !RETROFIT_VERBS.has(verb)) continue;
+    const argNode = firstChildOfType(ann, "value_arguments")?.namedChild(0);
+    if (!argNode) continue;
+
+    const argText = String(argNode.text);
+    let pathVal: string | undefined;
+    if (argText.startsWith('"')) {
+      pathVal = argText.replace(/^"|"$/g, "").replace(/\$\{([\w.]+)\}/g, (_, r: string) => resolveConst(lastSegment(r)) ?? "");
+    } else {
+      pathVal = resolveConst(lastSegment(argText));
+    }
+    if (!pathVal) continue;
+
+    const from = fdToId.get(fd.id);
+    if (!from) continue;
+    const normalized = /^https?:\/\//.test(pathVal) ? pathVal : "/" + pathVal.replace(/^\/+/, "");
+    return { method: verb, path: normalized, from, line: fd.startPosition.row + 1 };
+  }
+  return undefined;
+}
+
+function lastSegment(ref: string): string {
+  const i = ref.lastIndexOf(".");
+  return i >= 0 ? ref.slice(i + 1) : ref;
 }
 
 // --- tree-sitter helpers (nodes are `any` — the grammars ship no types) ---

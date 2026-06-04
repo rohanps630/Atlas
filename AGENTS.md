@@ -53,8 +53,10 @@ CLAUDE.md, added by the owner.
 Phase 4 is in progress: Swift + Kotlin (tree-sitter, ADR 0008) and Go with chi route
 extraction (ADR 0010) run automatically during `scan`/`refresh` and merge into the repo's
 topology, so `context`/`impact`/endpoints and the MCP server cover native + Go too.
-`cli/extract.ts` orchestrates the per-repo, multi-language extraction. Verified polyglot
-linking: HMS Next.js FE ↔ Go/chi backend (7 cross-repo contracts).
+The Kotlin extractor also emits Retrofit `consumes` (ADR 0011). `cli/extract.ts` orchestrates
+the per-repo, multi-language extraction. Verified polyglot linking: the HMS workspace spans 3
+repos / 3 languages — Next.js (TS) + Android (Kotlin/Retrofit) both link to the Go/chi backend
+(21 cross-repo contracts).
 
 Stack detection (ADR 0009, `cli/detect.ts`) infers languages, frameworks, role, and type
 from deps/config/structure; `scan` auto-fills `--role`/`--type` (overridable) and the agent

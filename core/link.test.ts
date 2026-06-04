@@ -22,6 +22,11 @@ test("normalizePath strips param names (express, brace, template)", () => {
   assert.equal(normalizePath("/api/orders/${id}"), "/api/orders/{}");
 });
 
+test("normalizePath strips a non-root trailing slash", () => {
+  assert.equal(normalizePath("/api/v1/sync/blobs/{uid}/"), "/api/v1/sync/blobs/{}");
+  assert.equal(normalizePath("/"), "/");
+});
+
 test("matching consume and expose resolve to a cross-repo edge", () => {
   const fe = repo("fe", {
     consumes: [
