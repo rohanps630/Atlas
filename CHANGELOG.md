@@ -2,6 +2,18 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Kotlin Retrofit consumes (ADR 0011)
+
+- No schema change.
+- Kotlin extractor now emits `consumes` from Retrofit annotations (`@GET/@POST/...`),
+  resolving route constants and `${X.Y}` string-template references via a repo-wide const map
+  (e.g. `AuthRoutes.REGISTER → /api/v1/auth/register`).
+- Linker: `normalizePath` now strips a non-root trailing slash, so a chi `"/"` leaf and a
+  client call to the same path link (e.g. `/sync/blobs/{}/` ↔ `/sync/blobs/{}`).
+- Dogfooded: the HMS workspace now spans 3 repos / 3 languages — `hms-admin` (TS) and
+  `hms-mobile` (Kotlin/Retrofit) both link to `hms-backend` (Go/chi): 21 cross-repo contracts,
+  3 honest externals (env-var base URLs).
+
 ## [Unreleased] — Go extractor + chi routes (ADR 0010)
 
 - No schema change.

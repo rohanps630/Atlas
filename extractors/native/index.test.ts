@@ -25,3 +25,11 @@ for (const language of ["swift", "kotlin"] as const) {
     assert.ok(linked, "expected Greeter.greet → Greeter.build call edge");
   });
 }
+
+test("kotlin Retrofit consumes resolve const route templates", () => {
+  const out = extractNative({ repoPath: fixture, repoId: "nm", language: "kotlin" });
+  const c = out.endpoints.consumes.find((e) => e.path === "/api/v1/auth/register");
+  assert.ok(c, `expected POST /api/v1/auth/register, got ${out.endpoints.consumes.map((x) => x.method + " " + x.path).join(", ")}`);
+  assert.equal(c!.method, "POST");
+  assert.ok(c!.from.endsWith("#AuthApi.register") || c!.from.endsWith("#register"));
+});

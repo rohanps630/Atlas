@@ -16,6 +16,7 @@ not silently change course — write a new ADR that **supersedes** the old one a
 | [0008](0008-native-extractors-tree-sitter.md) | Swift & Kotlin extractors via tree-sitter | Accepted |
 | [0009](0009-automatic-stack-detection.md) | Automatic stack detection drives scan config | Accepted |
 | [0010](0010-go-extractor-tree-sitter-chi.md) | Go extractor via tree-sitter, with chi routes | Accepted |
+| [0011](0011-kotlin-retrofit-consumes.md) | Kotlin Retrofit consumes extraction | Accepted |
 
 ## Format
 
