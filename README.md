@@ -154,9 +154,10 @@ With a single workspace, `-w` is optional; with a single repo in it, `--repo` is
 | `atlas detect <path>` | Infer a repo's languages, frameworks, and role (no scan) |
 | `atlas scan <path>` | Extract a repo into a workspace, then re-link |
 | `atlas context <symbol\|file>` | Target + its callers and callees |
-| `atlas impact <symbol\|file>` | Transitive callers + cross-repo consumers (`--depth`/`--limit`) |
+| `atlas impact <symbol\|file>` | Transitive callers + cross-repo consumers (`--depth`/`--limit`); `--diff` for a git change's blast radius |
 | `atlas path <A> <B>` | Shortest connection between two symbols (cross-repo) |
 | `atlas endpoints` | Cross-repo links + external (unmatched) endpoints |
+| `atlas viz` | Interactive, self-contained HTML map of the workspace graph |
 | `atlas agent` | Generate steering + `architecture.md`; print wiring |
 | `atlas refresh` | Re-scan a whole workspace, re-link, regenerate agent docs |
 | `atlas mcp` | Run the MCP server (stdio) for agents |
@@ -248,9 +249,10 @@ Read in this order:
 4. [`docs/schema.md`](docs/schema.md) — the keystone data contract (a versioned public API).
 5. [`docs/adr/`](docs/adr/) — why each major decision was made.
 6. [`docs/rejected.md`](docs/rejected.md) — what was deliberately *not* built, and why.
-7. [`docs/how-it-works.md`](docs/how-it-works.md) — the end-to-end pipeline.
-8. [`docs/cli.md`](docs/cli.md) — the full command reference.
-9. [`docs/setup.md`](docs/setup.md) — installing & sharing across machines/OSes.
+7. [`docs/backlog.md`](docs/backlog.md) — salvaged-but-not-yet-earned ideas (build when a real need appears).
+8. [`docs/how-it-works.md`](docs/how-it-works.md) — the end-to-end pipeline.
+9. [`docs/cli.md`](docs/cli.md) — the full command reference.
+10. [`docs/setup.md`](docs/setup.md) — installing & sharing across machines/OSes.
 
 ## Development
 
