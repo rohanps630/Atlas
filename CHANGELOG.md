@@ -22,11 +22,13 @@ front-ends over data Atlas already has — no schema change, core untouched (ADR
   impact over all of them. Dogfooded on HMS: a router/middleware change in the Go backend traced
   straight to the **Kotlin mobile app's Retrofit endpoints** it affects. Git is invoked read-only;
   no network (ADR 0006). The pure diff→nodes mapper is unit-tested without git.
-- **`atlas viz [--repo <id>] [--out <file>]`** (ADR 0018): a self-contained, interactive HTML
-  force-graph of the workspace (connected nodes coloured by repo, cross-repo HTTP edges
-  highlighted; pan/zoom/hover/search). Deterministic seeded layout (`core/viz.ts`), no CDN/network
-  — opens offline, NDA-safe. Writes `~/.atlas/<ws>/graph.html`. A richer companion to the static
-  Mermaid diagram. Dogfooded on HMS (1622 nodes / 3192 edges); the model + layout are unit-tested.
+- **`atlas viz [--calls] [--repo <id>] [--out <file>]`** (ADR 0018): a self-contained, interactive
+  HTML force-graph of the workspace. **Default is the readable system level** — one node per repo +
+  per external endpoint, with aggregated cross-repo contract edges (hover an edge to list its
+  contracts). `--calls` / `--repo` draw the dense function call graph for drill-down, with labels
+  on hover so it stays legible. (The first cut defaulted to the full 1600-node call graph, which
+  was an unreadable hairball on HMS; corrected to the system level.) Deterministic seeded layout
+  (`core/viz.ts`), no CDN/network — opens offline, NDA-safe. Model + both levels are unit-tested.
 - New `docs/backlog.md` records the remaining salvaged-but-not-yet-earned ideas (data-layer/
   shared-table topology, message-broker contracts) and the standing decision that the LLM stays an
   optional *consumer* of the map (the agent over MCP), never in the analysis pipeline.
