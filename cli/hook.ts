@@ -66,9 +66,13 @@ export function runHook(args: string[]): number {
 }
 
 function install(hooksDir: string, hookFile: string, event: string, ws: string): number {
+  // Git runs hooks via sh (Git Bash on Windows), where backslashes are escapes.
+  // Forward-slash the paths so the same hook works on macOS, Linux, and Windows.
+  const node = process.execPath.replace(/\\/g, "/");
+  const bin = ATLAS_BIN.replace(/\\/g, "/");
   const block = [
     MARK_START,
-    `( "${process.execPath}" "${ATLAS_BIN}" refresh -w "${ws}" >/dev/null 2>&1 & )`,
+    `( "${node}" "${bin}" refresh -w "${ws}" >/dev/null 2>&1 & )`,
     MARK_END,
   ].join("\n");
 
