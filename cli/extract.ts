@@ -9,7 +9,7 @@
  */
 
 import { extractRepo } from "../extractors/typescript/index.js";
-import { extractNative, type NativeLanguage } from "../extractors/native/index.js";
+import { extractNative, nativeLanguages } from "../extractors/native/index.js";
 import { extractGo } from "../extractors/go/index.js";
 import type { ExtractorOutput } from "../core/schema.js";
 
@@ -19,14 +19,13 @@ export interface RepoExtraction {
   perLanguage: { language: string; functions: number }[];
 }
 
-const NATIVE: NativeLanguage[] = ["swift", "kotlin"];
-
 export function extractRepoAll(repoPath: string, repoId: string): RepoExtraction {
   const ts = extractRepo({ repoPath, repoId });
   const outputs: ExtractorOutput[] = [ts];
   const perLanguage = [{ language: "typescript", functions: fnCount(ts) }];
 
-  for (const language of NATIVE) {
+  // Every registered tree-sitter language (Swift, Kotlin, …) runs automatically.
+  for (const language of nativeLanguages()) {
     const out = extractNative({ repoPath, repoId, language });
     const functions = fnCount(out);
     if (functions > 0) {

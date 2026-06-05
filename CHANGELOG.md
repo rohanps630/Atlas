@@ -2,6 +2,20 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Mermaid diagram, language registry, git hook
+
+- No schema change.
+- `core/mermaid.ts`: pure `systemDiagram(map)` renders the cross-repo contract wiring as a
+  Mermaid flowchart (subgraph per repo, solid edges = resolved contracts, dashed = external).
+  `atlas agent`/`refresh` embed it in `architecture.md`. (Idea adapted from graphify; kept to
+  the structured map — no LLM/embeddings/clustering, per ADR 0001/0002.)
+- `extractors/native`: refactored into a config-driven **language registry** (`LANGUAGES`).
+  Adding a tree-sitter language is one entry; `scan`/`refresh` auto-pick it up via
+  `nativeLanguages()`. Swift/Kotlin behavior unchanged. See `extractors/README.md`.
+- New `atlas hook install|uninstall [<repo>] -w <ws> [--event]`: installs a background git
+  hook that runs `atlas refresh` after commits — deterministic regeneration on a trigger
+  (philosophy #5), idempotent and non-clobbering, writes only under `.git/hooks` (ADR 0003).
+
 ## [Unreleased] — Go chi exposes precision fix
 
 - Go extractor: a chi route now requires a `/`-prefixed literal path AND a handler argument,
