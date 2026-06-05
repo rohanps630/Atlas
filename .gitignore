@@ -1,16 +1,44 @@
-# The data store lives OUTSIDE this repo (~/.atlas) — never commit generated data.
-# This guard only catches it if someone points the store inside the repo by mistake.
+# --- Atlas data store (ADR 0003) ---
+# Generated data lives OUTSIDE this repo (~/.atlas). This only catches it if the
+# store is ever pointed inside the repo by mistake. Never commit generated data.
 .atlas/
 *.local.json
 
-# Node
-node_modules/
+# --- Build output ---
 dist/
 build/
+*.tsbuildinfo
+
+# --- Dependencies ---
+node_modules/
+
+# --- Secrets / env (defense in depth — none are committed today) ---
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.keystore
+
+# --- Logs ---
 *.log
 npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# OS / editor
+# --- Test / coverage ---
+coverage/
+.nyc_output/
+
+# --- Personal agent memory (per-developer, not shared) ---
+CLAUDE.local.md
+
+# --- Scratch / spikes ---
+_*.mjs
+*.tmp
+
+# --- OS / editor ---
 .DS_Store
 .idea/
 .vscode/
+*.swp
