@@ -23,6 +23,12 @@ import {
   type ConsumedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
+import {
+  newStats,
+  resolveCall,
+  type Layer,
+  type ResolutionStats,
+} from "../shared/resolve.js";
 
 /** Per-language tree-sitter node-type config. */
 export interface LangSpec {
@@ -31,10 +37,13 @@ export interface LangSpec {
   funcType: string;          // function declaration node
   callType: string;          // call expression node
   classScopeTypes: string[]; // nodes that introduce a Type scope (for `Type.method`)
+  typeDeclTypes: string[];   // all repo type declarations (incl. object/protocol),
+                             // for the repo-type set used in external classification
   nameTypes: string[];       // identifier node(s) used for names / direct callees
   classNameTypes: string[];  // identifier node(s) for a class/type name
   memberType: string;        // member-access expression (e.g. `a.b`)
   memberSuffixType: string;  // the trailing `.b` part of a member access
+  bindingType: string;       // local binding (`val x = ...` / `let x = ...`)
   retrofit?: boolean;        // extract Kotlin Retrofit `consumes`
 }
 
@@ -43,10 +52,16 @@ const COMMON = {
   funcType: "function_declaration",
   callType: "call_expression",
   classScopeTypes: ["class_declaration"],
+  // Kotlin `object`/`interface` and Swift `protocol`/`struct`/`enum` also declare
+  // repo types — include them so a receiver typed to one is classified
+  // internal-unresolved, not external (ADR 0016 honesty). Method qualification +
+  // field collection still key off classScopeTypes (the ones with methods/fields).
+  typeDeclTypes: ["class_declaration", "object_declaration", "protocol_declaration"],
   nameTypes: ["simple_identifier"],
   classNameTypes: ["type_identifier", "simple_identifier"],
   memberType: "navigation_expression",
   memberSuffixType: "navigation_suffix",
+  bindingType: "property_declaration",
 };
 
 export const LANGUAGES: Record<string, LangSpec> = {
@@ -74,23 +89,26 @@ export interface NativeExtractOptions {
   language: NativeLanguage;
 }
 
-export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
+export function extractNative(opts: NativeExtractOptions, stats?: ResolutionStats): ExtractorOutput {
   const spec = LANGUAGES[opts.language];
   if (!spec) throw new Error(`No native language spec for "${opts.language}"`);
 
   const root = path.resolve(opts.repoPath);
   const parser = new Parser();
   parser.setLanguage(spec.grammar);
+  const st = stats ?? newStats();
 
   const files = walk(root, spec.exts);
   const nodes: AtlasNode[] = [];
   const edges: AtlasEdge[] = [];
   const takenIds = new Set<string>();
   const byShortName = new Map<string, string[]>(); // short fn name -> node ids
+  const methodByFull = new Map<string, string[]>(); // "Class.method" -> node ids
+  const classNames = new Set<string>(); // every declared type name (for receiver typing)
   const perFile: { rel: string; root: any; fdToId: Map<number, string> }[] = [];
   const constMap = new Map<string, string>(); // Kotlin `val NAME = "..."` map
 
-  // Pass 1: module + function nodes.
+  // Pass 1: module + function nodes (+ class-name and full-name indexes).
   for (const file of files) {
     const rel = toPosix(path.relative(root, file));
     const moduleId = `${opts.repoId}:${rel}`;
@@ -104,6 +122,11 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
     const tree = parseFile(parser, src, rel);
     if (!tree) continue; // unparseable file — skip, don't fail the whole scan
 
+    for (const cls of descendants(tree.rootNode, spec.typeDeclTypes)) {
+      const cn = className(cls, spec);
+      if (cn) classNames.add(cn);
+    }
+
     const fdToId = new Map<number, string>();
     for (const fd of descendants(tree.rootNode, spec.funcType)) {
       const name = functionName(fd, spec);
@@ -113,22 +136,65 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
       nodes.push({ id, kind: "function", name, file: rel, line: fd.startPosition.row + 1 });
       fdToId.set(fd.id, id);
       push(byShortName, shortName(name), id);
+      if (name.includes(".")) push(methodByFull, name, id);
     }
     perFile.push({ rel, root: tree.rootNode, fdToId });
   }
 
-  // Pass 2: call edges (resolved by unique short name within the repo).
+  // Class field/property types, repo-wide (ADR 0016): Class -> field -> type. Built
+  // after pass 1 so constructor-call inference sees every class name.
+  const fieldsByClass = new Map<string, Map<string, string>>();
+  for (const { root: fileRoot } of perFile) {
+    for (const cls of descendants(fileRoot, spec.classScopeTypes)) {
+      const cn = className(cls, spec);
+      if (!cn) continue;
+      const fm = collectFields(cls, spec, classNames);
+      if (fm.size) fieldsByClass.set(cn, mergeMaps(fieldsByClass.get(cn), fm));
+    }
+  }
+
+  // Pass 2: call edges — layered resolution (ADR 0012/0016): receiver/type →
+  // enclosing class scope → repo-global, emitting only when a layer narrows to one.
+  const envCache = new Map<number, Map<string, string>>(); // func node id -> var -> class
   for (const { root: fileRoot, fdToId } of perFile) {
     for (const call of descendants(fileRoot, spec.callType)) {
-      const fromId = enclosingFunctionId(call, fdToId, spec);
+      const encNode = enclosingFunctionNode(call, spec);
+      const fromId = encNode ? fdToId.get(encNode.id) : undefined;
       if (!fromId) continue;
-      const callee = calleeName(call, spec);
+      const callee = calleeInfo(call, spec);
       if (!callee) continue;
-      const matches = byShortName.get(callee);
-      if (!matches || matches.length !== 1) continue; // unresolved or ambiguous → skip
-      const toId = matches[0]!;
-      if (toId === fromId) continue;
-      edges.push({ from: fromId, to: toId, kind: "call", line: call.startPosition.row + 1 });
+
+      const layers: Layer[] = [];
+      const cls = enclosingClassName(encNode, spec);
+      if (callee.kind === "bare" || callee.isSelf) {
+        // bare `f()` or `this/self.f()` → prefer the enclosing class's method.
+        if (cls) layers.push({ via: "scope", candidates: methodByFull.get(`${cls}.${callee.short}`) ?? [] });
+        layers.push({ via: "global", candidates: byShortName.get(callee.short) ?? [] });
+      } else if (callee.recvName) {
+        // `x.f()` → x's type: a local/param binding, an enclosing-class field, or
+        // x itself naming a class (static-style). Then the exact `Type.method`.
+        const env = nativeEnvFor(encNode, spec, classNames, envCache);
+        const t =
+          env.get(callee.recvName) ??
+          (cls ? fieldsByClass.get(cls)?.get(callee.recvName) : undefined) ??
+          (classNames.has(callee.recvName) ? callee.recvName : undefined);
+        const full = t ? methodByFull.get(`${t}.${callee.short}`) : undefined;
+        if (full && full.length) {
+          layers.push({ via: "receiver", candidates: full });
+        } else if (t && !classNames.has(t)) {
+          // Receiver is a known non-repo type (String, Context, …): external call
+          // — don't fall through to the global short name (ADR 0016 / 0015).
+          resolveCall(fromId, [], st);
+          continue;
+        }
+        layers.push({ via: "global", candidates: byShortName.get(callee.short) ?? [] });
+      } else {
+        // chained / complex receiver → repo-global only (today's behavior).
+        layers.push({ via: "global", candidates: byShortName.get(callee.short) ?? [] });
+      }
+
+      const r = resolveCall(fromId, layers, st);
+      if (r) edges.push({ from: fromId, to: r.to, kind: "call", line: call.startPosition.row + 1 });
     }
   }
 
@@ -231,10 +297,11 @@ function parseFile(parser: any, src: string, rel: string): any | undefined {
   }
 }
 
-function descendants(node: any, type: string): any[] {
+function descendants(node: any, type: string | string[]): any[] {
+  const types = Array.isArray(type) ? type : [type];
   const out: any[] = [];
   (function walkNode(n: any) {
-    if (n.type === type) out.push(n);
+    if (types.includes(n.type)) out.push(n);
     for (let i = 0; i < n.namedChildCount; i++) walkNode(n.namedChild(i));
   })(node);
   return out;
@@ -261,29 +328,178 @@ function functionName(fd: any, spec: LangSpec): string | undefined {
   const nameNode = fd.childForFieldName?.("name") ?? firstChildOfTypes(fd, spec.nameTypes);
   if (!nameNode) return undefined;
   const base = nameNode.text as string;
-
-  let p = fd.parent;
-  while (p) {
-    if (spec.classScopeTypes.includes(p.type)) {
-      const cn = p.childForFieldName?.("name") ?? firstChildOfTypes(p, spec.classNameTypes);
-      return cn ? `${cn.text}.${base}` : base;
-    }
-    p = p.parent;
-  }
-  return base;
+  const cls = enclosingClassName(fd, spec);
+  return cls ? `${cls}.${base}` : base;
 }
 
-/** The simple name a call targets (last segment of a member access). */
-function calleeName(call: any, spec: LangSpec): string | undefined {
+/** The declared name of a class/struct/type node. */
+function className(cls: any, spec: LangSpec): string | undefined {
+  const cn = cls.childForFieldName?.("name") ?? firstChildOfTypes(cls, spec.classNameTypes);
+  return cn ? (cn.text as string) : undefined;
+}
+
+/** The class/struct that lexically encloses a node, if any. */
+function enclosingClassName(node: any, spec: LangSpec): string | undefined {
+  let p = node?.parent;
+  while (p) {
+    if (spec.classScopeTypes.includes(p.type)) return className(p, spec);
+    p = p.parent;
+  }
+  return undefined;
+}
+
+interface CalleeInfo {
+  short: string; // the simple method/function name being called
+  kind: "bare" | "member";
+  recvName?: string; // member call with a simple-identifier receiver (`x.f()`)
+  isSelf?: boolean; // member call on `this`/`self`
+}
+
+/** Describe a call's target: bare name, or member access (+ its receiver). */
+function calleeInfo(call: any, spec: LangSpec): CalleeInfo | undefined {
   const c0 = call.namedChild(0);
   if (!c0) return undefined;
-  if (spec.nameTypes.includes(c0.type)) return c0.text;
+  if (spec.nameTypes.includes(c0.type)) return { short: c0.text, kind: "bare" };
   if (c0.type === spec.memberType) {
     const suffix = lastChildOfType(c0, spec.memberSuffixType);
-    if (suffix) {
-      const id = firstChildOfTypes(suffix, spec.nameTypes);
-      return id ? id.text : String(suffix.text).replace(/^\./, "");
+    if (!suffix) return undefined;
+    const id = firstChildOfTypes(suffix, spec.nameTypes);
+    const short = id ? id.text : String(suffix.text).replace(/^\./, "");
+    if (!short) return undefined;
+    const operand = c0.namedChild(0);
+    const isSelf = !!operand && (operand.type === "this_expression" || operand.type === "self_expression");
+    const recvName = operand && spec.nameTypes.includes(operand.type) ? operand.text : undefined;
+    return { short, kind: "member", recvName, isSelf };
+  }
+  return undefined;
+}
+
+/**
+ * Per-function binding environment: variable name → declared type name (ADR 0016).
+ * Sources: function **parameters** (`fun f(x: T)` / `func f(x: T)`), and local
+ * `val/let` bindings — either type-annotated (`val x: T`) or a constructor call
+ * of a repo class (`val x = Foo()`). Only types declared in the repo are useful
+ * downstream; syntactic and best-effort (philosophy #5).
+ */
+function nativeEnvFor(
+  fn: any,
+  spec: LangSpec,
+  classNames: Set<string>,
+  cache: Map<number, Map<string, string>>,
+): Map<string, string> {
+  const cached = cache.get(fn.id);
+  if (cached) return cached;
+  const env = new Map<string, string>();
+  for (const p of paramNodes(fn)) {
+    const name = bindingName(p);
+    const type = bindingType(p, classNames);
+    if (name && type) env.set(name, type);
+  }
+  for (const binding of descendants(fn, spec.bindingType)) {
+    const name = bindingName(binding);
+    const type = bindingType(binding, classNames);
+    if (name && type) env.set(name, type);
+  }
+  cache.set(fn.id, env);
+  return env;
+}
+
+/** Function parameters: direct `parameter` children, or Kotlin's wrapped ones. */
+function paramNodes(fn: any): any[] {
+  const out: any[] = [];
+  for (let i = 0; i < fn.namedChildCount; i++) {
+    const c = fn.namedChild(i);
+    if (c.type === "parameter") out.push(c);
+    else if (c.type === "function_value_parameters") {
+      for (let j = 0; j < c.namedChildCount; j++) {
+        if (c.namedChild(j).type === "parameter") out.push(c.namedChild(j));
+      }
     }
+  }
+  return out;
+}
+
+/** The bound variable name of a param/property/class-parameter declaration. */
+function bindingName(node: any): string | undefined {
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const c = node.namedChild(i);
+    const t = c.type;
+    if (
+      t === "user_type" || t === "type_annotation" || t === "call_expression" ||
+      t === "modifiers" || t === "binding_pattern_kind" || t === "value_binding_pattern"
+    ) continue;
+    if (t === "simple_identifier") return c.text;
+    if (t === "variable_declaration" || t === "pattern") {
+      const id = firstDescendantOfTypes(c, ["simple_identifier"]);
+      if (id) return id.text;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The declared type of a binding: its type annotation (`: T`, taken from the
+ * declaration's own `user_type`, not from any value expression), else the class
+ * of a constructor-call initializer (`= Foo()` when `Foo` is a repo class).
+ */
+function bindingType(node: any, classNames: Set<string>): string | undefined {
+  // Swift: `type_annotation > user_type`; Kotlin: a `user_type` directly on the
+  // declaration (or its `variable_declaration`). Restrict to those so we never
+  // pick up a `user_type` from inside the initializer expression.
+  const ann = firstChildOfType(node, "type_annotation");
+  const vd = firstChildOfType(node, "variable_declaration");
+  const ut =
+    firstChildOfType(node, "user_type") ??
+    (ann && firstChildOfType(ann, "user_type")) ??
+    (vd && firstChildOfType(vd, "user_type"));
+  if (ut) {
+    const ti = firstDescendantOfTypes(ut, ["type_identifier"]);
+    if (ti) return ti.text;
+  }
+  const call = firstChildOfType(node, "call_expression");
+  const callee = call?.namedChild(0);
+  if (callee?.type === "simple_identifier" && classNames.has(callee.text)) return callee.text;
+  return undefined;
+}
+
+/** Class field/property types: stored properties + Kotlin constructor `val/var`. */
+function collectFields(cls: any, spec: LangSpec, classNames: Set<string>): Map<string, string> {
+  const fields = new Map<string, string>();
+  const add = (decl: any) => {
+    const name = bindingName(decl);
+    const type = bindingType(decl, classNames);
+    if (name && type) fields.set(name, type);
+  };
+  const ctor = firstChildOfType(cls, "primary_constructor");
+  if (ctor) for (const cp of namedChildrenOfType(ctor, "class_parameter")) {
+    if (firstChildOfType(cp, "binding_pattern_kind")) add(cp); // `val/var` → a property
+  }
+  const body = firstChildOfType(cls, "class_body");
+  if (body) for (const pd of namedChildrenOfType(body, spec.bindingType)) add(pd);
+  return fields;
+}
+
+function namedChildrenOfType(node: any, type: string): any[] {
+  const out: any[] = [];
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const c = node.namedChild(i);
+    if (c.type === type) out.push(c);
+  }
+  return out;
+}
+
+/** Merge `b` into `a` (first value wins); returns the merged map. */
+function mergeMaps(a: Map<string, string> | undefined, b: Map<string, string>): Map<string, string> {
+  if (!a) return b;
+  for (const [k, v] of b) if (!a.has(k)) a.set(k, v);
+  return a;
+}
+
+function firstDescendantOfTypes(node: any, types: string[]): any | undefined {
+  if (types.includes(node.type)) return node;
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const found = firstDescendantOfTypes(node.namedChild(i), types);
+    if (found) return found;
   }
   return undefined;
 }
@@ -297,14 +513,11 @@ function lastChildOfType(node: any, type: string): any | undefined {
   return found;
 }
 
-/** Walk up to the nearest enclosing recorded function declaration's node id. */
-function enclosingFunctionId(node: any, fdToId: Map<number, string>, spec: LangSpec): string | undefined {
+/** Walk up to the nearest enclosing function declaration node. */
+function enclosingFunctionNode(node: any, spec: LangSpec): any | undefined {
   let p = node.parent;
   while (p) {
-    if (p.type === spec.funcType) {
-      const id = fdToId.get(p.id);
-      if (id) return id;
-    }
+    if (p.type === spec.funcType) return p;
     p = p.parent;
   }
   return undefined;

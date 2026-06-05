@@ -14,11 +14,13 @@ import {
   listWorkspaces,
   readManifest,
   readMap,
+  readResolution,
   readTopology,
   reposInWorkspace,
   storeRoot,
   workspaceDir,
 } from "./store.js";
+import { coveragePct } from "../extractors/shared/resolve.js";
 
 const VERSION = "0.1.0";
 
@@ -66,6 +68,13 @@ export function runStatus(args: string[]): number {
             `   (scanned ${ago(t.generatedAt)})`,
         );
         if (langs) console.log(`      languages: ${langs}`);
+        const res = readResolution(ws, id);
+        if (res) {
+          console.log(
+            `      call resolution: ${coveragePct(res)} of in-repo calls ` +
+              `(${res.resolved} resolved, ${res.internalUnresolved} unresolved)`,
+          );
+        }
       } catch {
         console.log(`  - ${id}  —  (no topology)`);
       }

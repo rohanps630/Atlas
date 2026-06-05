@@ -16,13 +16,36 @@ for (const language of ["swift", "kotlin"] as const) {
     assert.ok(names.includes("Greeter.greet"), `expected Greeter.greet, got ${names}`);
     assert.ok(names.includes("Greeter.build"), `expected Greeter.build, got ${names}`);
 
-    // greet() calls build() — resolved by unique short name within the repo.
+    // `build` is ambiguous repo-wide (Greeter.build + Other.build). The bare
+    // call build() inside Greeter resolves to Greeter.build via the class-scope
+    // layer (ADR 0012) — the pre-0012 resolver would have skipped it.
     const greet = out.nodes.find((n) => n.name === "Greeter.greet")!;
     const build = out.nodes.find((n) => n.name === "Greeter.build")!;
-    const linked = out.edges.some(
-      (e) => e.kind === "call" && e.from === greet.id && e.to === build.id,
-    );
-    assert.ok(linked, "expected Greeter.greet → Greeter.build call edge");
+    const otherBuild = out.nodes.find((n) => n.name === "Other.build")!;
+    const hasCall = (to: string) =>
+      out.edges.some((e) => e.kind === "call" && e.from === greet.id && e.to === to);
+    assert.ok(hasCall(build.id), "expected Greeter.greet → Greeter.build (scope)");
+
+    // `val o = Other(); o.build()` resolves to Other.build via the receiver layer.
+    assert.ok(hasCall(otherBuild.id), "expected Greeter.greet → Other.build (receiver)");
+  });
+}
+
+for (const language of ["swift", "kotlin"] as const) {
+  test(`${language} receiver typing from params and class fields (ADR 0016)`, () => {
+    const out = extractNative({ repoPath: fixture, repoId: "nm", language });
+    const byName = (n: string) => out.nodes.find((x) => x.name === n)!;
+    const hasCall = (from: string, to: string) =>
+      out.edges.some((e) => e.kind === "call" && e.from === byName(from).id && e.to === byName(to).id);
+
+    // field-typed receiver: `greeter` is a Greeter field → greeter.build() resolves.
+    assert.ok(hasCall("Handler.run", "Greeter.build"), "expected field-typed Handler.run → Greeter.build");
+    // param-typed receiver: `other: Other` → other.build() resolves to Other.build.
+    assert.ok(hasCall("Handler.run", "Other.build"), "expected param-typed Handler.run → Other.build");
+
+    // external classification: `ctx: Context` isn't a repo class, so ctx.zonk()
+    // must NOT link to the (globally-unique) Greeter.zonk — a removed wrong edge.
+    assert.ok(!hasCall("Handler.run", "Greeter.zonk"), "external-typed receiver must not resolve");
   });
 }
 

@@ -11,6 +11,108 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Native (Kotlin/Swift) receiver typing (ADR 0016)
+
+- No schema change; core untouched (ADR 0005). Native extractor (Swift + Kotlin).
+- Extends receiver typing (ADR 0012) with two sources the native extractor previously ignored:
+  **function-parameter types** (`fun f(x: T)` / `func f(x: T)` → `x : T`) and **class
+  field/property types** (stored properties + Kotlin constructor `val/var` params → a per-class
+  field→type map, looked up when a receiver identifier isn't a local binding). Both resolve
+  `x.method()` to the precise `Type.method`.
+- **External-receiver classification** (mirror ADR 0015): a receiver typed to a non-repo class
+  (`String`, `Context`, …) is counted `external` and not run through the global short-name
+  fallback — also removing wrong edges (a `ctx.foo()` linking to a coincidentally-unique repo
+  method). The grammars share the relevant node names, so the logic is one path for both langs.
+- **Measured (big Kotlin win):** hms-mobile (Kotlin) **59% → 85%** coverage, call edges
+  **1601 → 2277 (+676)** — `impact`/`path` on the Android app are far more complete. Swift, on
+  the only Swift in a workspace (`ghost_daddy`, a small RN native-module surface), showed **no
+  change (68% → 68%)**: it has no ambiguous calls resolvable via params/fields. So the Swift path
+  is added and fixture-tested but unexercised by real code here — the real validation is Kotlin.
+- 21 HMS cross-repo links / 3 externals unchanged (the new edges are intra-repo); tests 60/60;
+  new native-mini cases for field-typed and param-typed receivers plus a removed-wrong-edge
+  (external receiver) assertion, for both Swift and Kotlin.
+
+## [Unreleased] — Deeper Go receiver typing + external classification (ADR 0015)
+
+- No schema change; core untouched (ADR 0005). Go extractor only.
+- Extends the per-function type environment (ADR 0012) with package-level `var` types,
+  function/method **result-type** inference (`x := f()` / `x := r.m()`), and two-variable
+  **`range` element** types — so more receivers resolve to a precise `Type.method`.
+- **External-receiver classification**: a call whose receiver resolves to a type *not* declared
+  in the repo (`sql.DB`, `gin.Context`, …) is now counted `external` instead of
+  `internalUnresolved`, and is not run through the global short-name fallback — which also
+  removes *wrong* edges that fallback could emit (a call on `*sql.DB` linking to a coincidentally
+  unique repo method). Refines ADR 0013's internal-vs-external split toward its stated meaning.
+- **Honest measured result (modest):** HMS Go coverage hms-backend 51%→**53%**, hms-telephony
+  85%→**86%**; hms-telephony call edges 394→389 (all dropped ones were false). The bigger lift
+  first hypothesised did not materialise — the dominant unresolved receivers are closure params,
+  repo-*interface* dispatch, and type-switch bindings, which are genuinely unresolvable
+  syntactically (interface dispatch must not be guessed). So 53% is near the honest ceiling here.
+- Folding closure parameters into the env was tried and **reverted** (made it worse: 53%→52%,
+  −15 edges, since closure params are usually external types). Recorded in ADR 0015.
+- Native (Kotlin/Swift) deliberately unchanged — categorise its unresolved calls first (earn-it).
+- 21 HMS cross-repo links / 3 externals unchanged; tests 58/58; new go-mini fixtures for
+  return-type, range-element, and external-pkg-var cases.
+
+## [Unreleased] — Express mount-prefix + NestJS exposes (ADR 0014)
+
+- No schema change: additive `exposes` only; the linker and core are untouched (ADR 0005).
+- The TS extractor already emitted basic Express `exposes` (`app.get("/path", handler)`); a probe
+  found two real gaps, now closed:
+  - **Express mounted-router prefixes**: route registrations are collected keyed by their
+    router's resolved declaration, and `parent.use("/prefix", router)` mounts are joined onto
+    them — even across files (a `Router()` defined in one file and mounted in another), walked
+    transitively through nested mounts. Unmounted routers keep their bare path (no regression).
+  - **NestJS decorators**: a `@Controller(base)` class + method `@Get/@Post/...(sub)` decorators
+    expose `VERB /base/sub`, handler = the method's `Class.method` node. Previously a Nest
+    backend produced zero exposes (decorators aren't call expressions).
+- Best-effort/syntactic where the value isn't static: dynamic prefixes, `RouterModule.forRoutes`
+  config routing, and non-literal paths are skipped, not guessed (philosophy #5).
+- Validated on probe fixtures (`fixtures/node-svc` + `fixtures/node-web`) — there is no real
+  Node/Express/Nest backend in the dogfood workspaces (HMS is Go, ghost is RN), so this has
+  weaker real-repo evidence than the Go/Kotlin work; the fixtures encode the common patterns and
+  a cross-repo link test (FE `axios` calls ↔ Express mounted-router + Nest routes).
+- HMS unchanged (no Node backend): 21 cross-repo links / 3 externals intact; tests 57/57.
+
+## [Unreleased] — Call-resolution coverage signal (ADR 0013)
+
+- No schema change: a new generated artifact `~/.atlas/<ws>/<repoId>.resolution.json` alongside
+  `*.detection.json` (ADR 0003 generated data, not the schema-versioned topology); core untouched.
+- Per repo (summed across its languages), Atlas now records a call-resolution summary —
+  `resolved` / `internalUnresolved` (targets in-repo code but unpinned) / `external` (library/
+  runtime) / `total` — and a headline **coverage = resolved / (resolved + internalUnresolved)**:
+  of the calls that target in-repo code, the share that resolved into the graph. Library calls
+  are excluded so a type-checked TS frontend and a syntactic Go backend are comparable.
+  Descriptive, never a quality score (rejected.md): counts + one share + a plain meaning.
+- The TS extractor gains the same counting (a call whose callee declares in-repo but wasn't
+  mapped is `internalUnresolved`; node_modules/lib types are `external`). Go/native reuse the
+  ADR 0012 buckets.
+- Surfaced in `atlas status` (a per-repo line), `architecture.md` (a "Call-resolution coverage"
+  section), and the `scan`/`refresh` console output; steering tells the agent to widen its own
+  verification when a repo's coverage is low.
+- Dogfooded on HMS: hms-admin 89%, hms-backend 51%, hms-mobile 59%, hms-landing 100%,
+  hms-telephony 85%; 21 cross-repo links unchanged; tests green.
+
+## [Unreleased] — Scope/receiver-aware call resolution (ADR 0012)
+
+- No schema change: extractor output shape is unchanged; the core is untouched (ADR 0005).
+- The Go and native (Swift/Kotlin) tree-sitter extractors no longer skip every call whose
+  short name is non-unique in the repo. A shared, precision-ordered resolver
+  (`extractors/shared/resolve.ts`) tries **receiver/type → same-scope → repo-global** and emits
+  an edge only when a layer narrows to exactly one target — monotonic over the old global-unique
+  policy (every prior edge preserved; only adds), so no wrong edges.
+  - Go: a lightweight per-function type environment (receiver, params, `var`/`:=`) plus a
+    repo-wide **struct-field** map resolves receiver chains like `s.deps.Auth.Register()`;
+    bare `f()` resolves within the caller's package.
+  - Native: bare/`this`/`self` calls resolve to the enclosing class's method (scope);
+    `val/let x = Foo()` receivers resolve `x.m()` to `Foo.m` (receiver).
+  - Supersedes the "ambiguous names are skipped" consequence of ADR 0008 / 0010 only.
+- Per-repo resolution counters (total / resolved / via-layer / skipped-ambiguous / unresolved)
+  are exposed out-of-band for measurement (and the upcoming coverage signal) — never persisted.
+- Dogfooded on HMS (same source, before→after call edges): hms-backend 296→328, hms-telephony
+  378→394, hms-mobile 1497→1601 (+152 total); TS repos unchanged; **21 cross-repo links and 3
+  externals intact**; tests green; new fixtures/assertions for the receiver/scope/negative cases.
+
 ## [Unreleased] — Cross-platform (macOS / Linux / Windows)
 
 - Confirmed/hardened cross-OS support: the git auto-refresh hook and the printed wiring lines
