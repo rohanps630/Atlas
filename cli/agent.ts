@@ -20,6 +20,7 @@ import { linkRepos } from "../core/link.js";
 import { systemDiagram } from "../core/mermaid.js";
 import { Graph } from "../core/graph.js";
 import { topHubs, suggestedQuestions } from "../core/orientation.js";
+import { collectLandmines } from "./landmines.js";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
 import {
   readAllTopologies,
@@ -123,6 +124,16 @@ function architectureMd(m: Manifest, tops: ExtractorOutput[], map: MergedMap): s
     L.push(`- \`${n.id.replace(/^external:/, "")}\` — ${n.consumedBy.length} call site(s)`);
   }
   L.push("");
+  const landmines = collectLandmines(m.repos);
+  if (landmines.length > 0) {
+    L.push(`## Landmines (TODO / FIXME / HACK / WHY)`);
+    L.push(`Known caveats near code you may touch — verify before changing:`);
+    for (const lm of landmines) {
+      L.push(`- **${lm.marker}** ${lm.repo}/${lm.file}:${lm.line} — ${lm.text}`);
+    }
+    L.push("");
+  }
+
   L.push(`## System diagram`);
   L.push("```mermaid");
   L.push(systemDiagram(map));

@@ -9,6 +9,7 @@ import { buildGraph, Graph } from "../core/graph.js";
 import { contextPack, resolveTargets, type ContextPack } from "../core/context.js";
 import { transitiveCallers } from "../core/impact.js";
 import { shortestPath, type PathResult } from "../core/path.js";
+import { neighborhood, type Neighborhood } from "../core/neighborhood.js";
 import type { AtlasEdge, AtlasNode, CrossRepoEdge, MergedMap } from "../core/schema.js";
 import {
   listWorkspaces,
@@ -107,6 +108,19 @@ export function queryImpact(
 
 export function queryEndpoints(workspace?: string): MergedMap {
   return readMap(pickWorkspace(workspace));
+}
+
+/** The local call subgraph around a symbol (one call; depth/size-bounded). */
+export function queryNeighborhood(
+  symbol: string,
+  workspace?: string,
+  repo?: string,
+  depth?: number,
+): Neighborhood {
+  const ws = pickWorkspace(workspace);
+  const graph = buildGraph(readTopology(ws, pickRepo(ws, repo)));
+  const seeds = resolveTargets(graph, symbol).nodes.map((n) => n.id);
+  return neighborhood(graph, seeds, { depth: depth ?? 1 });
 }
 
 export interface PathQueryResult {
