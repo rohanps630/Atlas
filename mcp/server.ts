@@ -19,6 +19,7 @@ import {
   queryContext,
   queryEndpoints,
   queryImpact,
+  queryNeighborhood,
   queryPath,
 } from "../cli/query.js";
 
@@ -89,6 +90,21 @@ const TOOLS = [
       required: ["from", "to"],
     },
   },
+  {
+    name: "atlas_neighborhood",
+    description:
+      "The local call subgraph around a symbol (its callers + callees to a given depth) in one bounded call — use to understand 'what's around this' without separate context/impact queries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        symbol: { type: "string" },
+        depth: { type: "number", description: "Hops out from the symbol (default 1)." },
+        ...wsProp,
+        ...repoProp,
+      },
+      required: ["symbol"],
+    },
+  },
 ] as const;
 
 function ok(data: unknown) {
@@ -120,6 +136,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return ok(queryEndpoints(args.workspace));
       case "atlas_path":
         return ok(queryPath(args.from!, args.to!, args.workspace, args.maxHops ? Number(args.maxHops) : undefined));
+      case "atlas_neighborhood":
+        return ok(queryNeighborhood(args.symbol!, args.workspace, args.repo, args.depth ? Number(args.depth) : undefined));
       default:
         return fail(`Unknown tool: ${name}`);
     }

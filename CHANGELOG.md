@@ -2,6 +2,20 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Agent-efficiency Tier 2 (neighborhood, landmines, search-nudge)
+
+- **`atlas_neighborhood`** MCP tool (+ `queryNeighborhood`): the depth/size-bounded local call
+  subgraph around a symbol in one call (`core/neighborhood.ts`) — fewer round-trips than
+  separate context/impact/path queries.
+- **Landmines** section in `architecture.md`: a bounded scan for `TODO/FIXME/HACK/XXX/BUG/
+  WHY/NOTE` comments across the workspace (`cli/landmines.ts`), so the agent sees known caveats
+  before editing nearby code. No schema change.
+- **`atlas hook search-nudge`**: merges a Claude Code PreToolUse hook into
+  `<repo>/.claude/settings.json` that reminds the agent to query Atlas before raw Grep/Glob
+  (safe JSON merge, idempotent, `--remove` to undo). Best-effort.
+- Deferred (intentionally): incremental/cached scanning — a large invalidation surface for a
+  ~1.5s gain; full re-scan stays the safe default (rejected.md: stale-but-trusted is worse).
+
 ## [Unreleased] — Agent-efficiency Tier 1 (path, budgets, orientation)
 
 Ports the deterministic, on-thesis agent-query refinements from graphify (no embeddings/

@@ -27,8 +27,21 @@ const VALID_EVENTS = new Set(["post-commit", "post-merge", "post-checkout", "pos
 export function runHook(args: string[]): number {
   const sub = args[0];
   const opts = parseArgs(args.slice(1));
+
+  if (sub === "search-nudge") {
+    const repoPath = opts.repoPath ?? process.cwd();
+    if (opts.remove) return searchNudge(repoPath, "", true);
+    const ws = resolveWorkspace(opts.workspace);
+    if (!ws) return 1;
+    return searchNudge(repoPath, ws, false);
+  }
+
   if (sub !== "install" && sub !== "uninstall") {
-    console.error("usage: atlas hook <install|uninstall> [<repo-path>] [-w <ws>] [--event post-commit]");
+    console.error(
+      "usage:\n" +
+        "  atlas hook install|uninstall [<repo>] [-w <ws>] [--event post-commit]\n" +
+        "  atlas hook search-nudge [<repo>] [-w <ws>] [--remove]",
+    );
     return 1;
   }
 
@@ -93,6 +106,61 @@ function uninstall(hookFile: string, event: string): number {
   return 0;
 }
 
+const NUDGE_MARKER = "atlas-search-nudge";
+
+/**
+ * Merge (or remove) a Claude Code PreToolUse hook into <repo>/.claude/settings.json
+ * that reminds the agent to query Atlas before raw Grep/Glob. Safe JSON merge,
+ * idempotent (keyed by a marker in the command). Best-effort: whether the
+ * reminder surfaces depends on the agent runtime.
+ */
+function searchNudge(repoPath: string, ws: string, remove?: boolean): number {
+  const dir = join(repoPath, ".claude");
+  const file = join(dir, "settings.json");
+  let settings: any = {};
+  if (fs.existsSync(file)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      console.error(`Could not parse ${file}; leaving it untouched.`);
+      return 1;
+    }
+  }
+
+  settings.hooks ??= {};
+  const pre: any[] = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
+  const withoutOurs = pre.filter(
+    (entry) => !JSON.stringify(entry).includes(NUDGE_MARKER),
+  );
+
+  if (remove) {
+    settings.hooks.PreToolUse = withoutOurs;
+    if (settings.hooks.PreToolUse.length === 0) delete settings.hooks.PreToolUse;
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2) + "\n", "utf8");
+    console.error(`removed atlas search-nudge hook from ${file}`);
+    return 0;
+  }
+
+  const msg =
+    `atlas: this repo has an Atlas map (workspace ${ws}). Prefer atlas_context / ` +
+    `atlas_impact / atlas_path / atlas_endpoints over raw grep when exploring structure.`;
+  withoutOurs.push({
+    matcher: "Grep|Glob",
+    hooks: [{ type: "command", command: `echo ${shellQuote(msg)} >&2 # ${NUDGE_MARKER}` }],
+  });
+  settings.hooks.PreToolUse = withoutOurs;
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(settings, null, 2) + "\n", "utf8");
+  console.error(`installed atlas search-nudge PreToolUse hook (Grep|Glob) → ${file}`);
+  console.error(`(best-effort reminder; restart the agent session to load it)`);
+  return 0;
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 function stripBlock(content: string): string {
   const re = new RegExp(`\\n*${escapeRe(MARK_START)}[\\s\\S]*?${escapeRe(MARK_END)}\\n*`, "g");
   return content.replace(re, "\n");
@@ -102,12 +170,13 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function parseArgs(args: string[]): { repoPath?: string; workspace?: string; event?: string } {
-  const out: { repoPath?: string; workspace?: string; event?: string } = {};
+function parseArgs(args: string[]): { repoPath?: string; workspace?: string; event?: string; remove?: boolean } {
+  const out: { repoPath?: string; workspace?: string; event?: string; remove?: boolean } = {};
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--workspace" || a === "-w") out.workspace = args[++i];
     else if (a === "--event") out.event = args[++i];
+    else if (a === "--remove") out.remove = true;
     else if (a && !a.startsWith("-")) out.repoPath ??= a;
   }
   return out;
