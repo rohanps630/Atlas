@@ -28,8 +28,10 @@ import {
   readDetection,
   readManifest,
   readMap,
+  readResolution,
   workspaceDir,
 } from "./store.js";
+import { coveragePct } from "../extractors/shared/resolve.js";
 import { resolveWorkspace } from "./workspace.js";
 
 // tool root = two levels up from dist/cli/agent.js
@@ -132,6 +134,28 @@ function architectureMd(m: Manifest, tops: ExtractorOutput[], map: MergedMap): s
     );
   }
   L.push("");
+
+  // Call-resolution coverage (ADR 0013): how complete each repo's call graph is,
+  // so impact/path results can be calibrated. Descriptive — not a quality score.
+  const coverable = m.repos
+    .map((r) => ({ id: r.id, res: readResolution(m.workspace, r.id) }))
+    .filter((x) => x.res && x.res.resolved + x.res.internalUnresolved > 0);
+  if (coverable.length > 0) {
+    L.push(`## Call-resolution coverage`);
+    L.push(
+      `Share of each repo's *in-repo* calls that resolved into the graph ` +
+        `(library/runtime calls excluded). \`impact\`/\`path\` see this much of the ` +
+        `call graph — treat the rest as possible blind spots, not absence. A hint, not a score.`,
+    );
+    for (const { id, res } of coverable) {
+      L.push(
+        `- **${id}**: ${coveragePct(res!)} — ${res!.resolved} resolved, ` +
+          `${res!.internalUnresolved} unresolved (of ${res!.resolved + res!.internalUnresolved} in-repo calls)`,
+      );
+    }
+    L.push("");
+  }
+
   L.push(`## Cross-repo links (${map.crossRepoEdges.length})`);
   for (const e of map.crossRepoEdges) L.push(`- \`${e.contract}\`: ${e.from} → ${e.to}`);
   if (map.crossRepoEdges.length === 0) L.push(`- _(none resolved yet)_`);
@@ -192,7 +216,9 @@ ${stack.length ? `\nDetected stack (auto): ${stack.join("; ")}.\n` : ""}
 
 ## When to use Atlas (without being asked)
 - **Before editing/renaming/deleting a function** → \`atlas impact <symbol> -w ${ws}\`
-  (transitive callers + cross-repo consumers — the blast radius).
+  (transitive callers + cross-repo consumers — the blast radius). Calibrate by the
+  **call-resolution coverage** in \`architecture.md\`: a lower number means more of that
+  repo's call graph is unresolved, so widen your own verification.
 - **Orienting in unfamiliar code** → \`atlas context <symbol|file> -w ${ws}\`
   (the thing + its callers + callees).
 - **"What backend does this call?" / cross-repo questions** → \`atlas endpoints -w ${ws}\`.

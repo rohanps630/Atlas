@@ -45,6 +45,67 @@ export function newStats(): ResolutionStats {
   };
 }
 
+/**
+ * Per-repo call-resolution summary (ADR 0013) — generated data, not a schema
+ * contract. Descriptive, never a quality score (rejected.md): a user/agent reads
+ * it to calibrate how far to trust `impact`/`path` on a repo.
+ *
+ *  - `resolved`           — the call became a `call` edge to an in-repo node.
+ *  - `internalUnresolved` — the call targets something that could be in-repo but
+ *                           we couldn't pin it (Go/native: ambiguous short name;
+ *                           TS: callee declared in-repo but not mapped to a node).
+ *  - `external`           — no in-repo candidate (library / stdlib / runtime).
+ *  - `total`              — all call sites considered (incl. self-calls).
+ */
+export interface CallResolution {
+  resolved: number;
+  internalUnresolved: number;
+  external: number;
+  total: number;
+}
+
+/** Project the raw layered-resolution counters into the ADR 0013 summary. */
+export function toCallResolution(s: ResolutionStats): CallResolution {
+  return {
+    resolved: s.resolved,
+    internalUnresolved: s.skippedAmbiguous,
+    external: s.unresolved,
+    total: s.total,
+  };
+}
+
+/** Sum two summaries (used to aggregate a repo's languages into one number). */
+export function addResolution(a: CallResolution, b: CallResolution): CallResolution {
+  return {
+    resolved: a.resolved + b.resolved,
+    internalUnresolved: a.internalUnresolved + b.internalUnresolved,
+    external: a.external + b.external,
+    total: a.total + b.total,
+  };
+}
+
+export function emptyResolution(): CallResolution {
+  return { resolved: 0, internalUnresolved: 0, external: 0, total: 0 };
+}
+
+/**
+ * Coverage = resolved / (resolved + internalUnresolved): of the calls that
+ * target in-repo code, the share we resolved into the graph. Excludes `external`
+ * so a library-heavy repo isn't penalised (ADR 0013). Returns undefined when the
+ * repo has no in-repo calls at all (nothing to be confident or unsure about).
+ */
+export function coverage(r: CallResolution): number | undefined {
+  const denom = r.resolved + r.internalUnresolved;
+  return denom === 0 ? undefined : r.resolved / denom;
+}
+
+/** Coverage as a rounded percent string ("82%"), or "n/a" when there are no
+ *  in-repo calls. Shared so `status` and `architecture.md` read identically. */
+export function coveragePct(r: CallResolution): string {
+  const c = coverage(r);
+  return c === undefined ? "n/a" : `${Math.round(c * 100)}%`;
+}
+
 /** One precision layer's candidate node ids. An empty array means "no opinion". */
 export interface Layer {
   via: ResolveVia;

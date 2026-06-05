@@ -21,8 +21,10 @@ import {
   writeDetection,
   writeManifest,
   writeMap,
+  writeResolution,
   writeTopology,
 } from "./store.js";
+import { coveragePct } from "../extractors/shared/resolve.js";
 
 const ROLES: RepoRole[] = ["fe", "be", "lib", "tool"];
 
@@ -63,8 +65,9 @@ export function runScan(args: string[]): number {
 
   console.error(`scanning ${abs} as "${id}" (workspace "${workspace}", role ${role}) …`);
   const start = Date.now();
-  const { output, perLanguage } = extractRepoAll(abs, id);
+  const { output, perLanguage, resolution } = extractRepoAll(abs, id);
   writeTopology(workspace, output);
+  writeResolution(workspace, id, resolution);
   const ms = Date.now() - start;
 
   const fns = output.nodes.filter((n) => n.kind === "function").length;
@@ -73,6 +76,10 @@ export function runScan(args: string[]): number {
   const langs = perLanguage.map((l) => `${l.language} ${l.functions}`).join(", ");
   console.error(
     `done in ${ms}ms: ${fns} functions (${langs}), ${calls} calls, ${consumes} consumes`,
+  );
+  console.error(
+    `  call resolution: ${coveragePct(resolution)} of in-repo calls resolved ` +
+      `(${resolution.resolved} resolved, ${resolution.internalUnresolved} unresolved, ${resolution.external} external)`,
   );
 
   // Re-link the whole workspace and write the merged map.

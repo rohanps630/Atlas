@@ -11,6 +11,25 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Call-resolution coverage signal (ADR 0013)
+
+- No schema change: a new generated artifact `~/.atlas/<ws>/<repoId>.resolution.json` alongside
+  `*.detection.json` (ADR 0003 generated data, not the schema-versioned topology); core untouched.
+- Per repo (summed across its languages), Atlas now records a call-resolution summary —
+  `resolved` / `internalUnresolved` (targets in-repo code but unpinned) / `external` (library/
+  runtime) / `total` — and a headline **coverage = resolved / (resolved + internalUnresolved)**:
+  of the calls that target in-repo code, the share that resolved into the graph. Library calls
+  are excluded so a type-checked TS frontend and a syntactic Go backend are comparable.
+  Descriptive, never a quality score (rejected.md): counts + one share + a plain meaning.
+- The TS extractor gains the same counting (a call whose callee declares in-repo but wasn't
+  mapped is `internalUnresolved`; node_modules/lib types are `external`). Go/native reuse the
+  ADR 0012 buckets.
+- Surfaced in `atlas status` (a per-repo line), `architecture.md` (a "Call-resolution coverage"
+  section), and the `scan`/`refresh` console output; steering tells the agent to widen its own
+  verification when a repo's coverage is low.
+- Dogfooded on HMS: hms-admin 89%, hms-backend 51%, hms-mobile 59%, hms-landing 100%,
+  hms-telephony 85%; 21 cross-repo links unchanged; tests green.
+
 ## [Unreleased] — Scope/receiver-aware call resolution (ADR 0012)
 
 - No schema change: extractor output shape is unchanged; the core is untouched (ADR 0005).
