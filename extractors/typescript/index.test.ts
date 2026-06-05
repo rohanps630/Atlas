@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { extractRepo } from "./index.js";
 import { linkRepos } from "../../core/link.js";
+import { coverage, newStats, toCallResolution } from "../shared/resolve.js";
 
 // Light test (extractors churn — ADR 0005): just confirm the extractor produces
 // the normalized shape and resolves an obvious in-repo call against the fixture.
@@ -34,6 +35,19 @@ test("extracts functions, import edges, and resolved call edges", () => {
     (e) => e.kind === "import" && e.from.endsWith("orders.ts") && e.to.endsWith("http.ts"),
   );
   assert.ok(hasImport, "expected orders.ts -> http.ts import edge");
+});
+
+test("reports call-resolution coverage (ADR 0013)", () => {
+  const st = newStats();
+  extractRepo({ repoPath: fixtureRepo, repoId: "ts-mini" }, st);
+
+  assert.ok(st.total > 0, "should see call sites");
+  assert.ok(st.resolved > 0, "should resolve some in-repo calls (e.g. createOrder→post)");
+  // The fixture also calls library/runtime functions, so not everything resolves.
+  assert.ok(st.total > st.resolved, "expected some unresolved (external) calls");
+
+  const c = coverage(toCallResolution(st));
+  assert.ok(c !== undefined && c > 0 && c <= 1, `coverage in (0,1], got ${c}`);
 });
 
 test("extracts route and symbolic consumed endpoints", () => {

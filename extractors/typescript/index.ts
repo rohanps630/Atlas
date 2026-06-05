@@ -29,6 +29,7 @@ import {
   type ExposedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
+import { newStats, type ResolutionStats } from "../shared/resolve.js";
 
 export interface ExtractOptions {
   /** Absolute path to the repo root. */
@@ -37,8 +38,9 @@ export interface ExtractOptions {
   repoId: string;
 }
 
-export function extractRepo(opts: ExtractOptions): ExtractorOutput {
+export function extractRepo(opts: ExtractOptions, stats?: ResolutionStats): ExtractorOutput {
   const repoRoot = path.resolve(opts.repoPath);
+  const st = stats ?? newStats();
   const project = loadProject(repoRoot);
 
   const sourceFiles = project
@@ -104,13 +106,24 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
       const fromId = enclosingId(call, declToId) ?? fromModule;
 
       const toId = resolveCallTarget(call, declToId);
+      // Call-resolution coverage (ADR 0013): ts-morph is type-aware, so an
+      // unresolved call that still declares inside the repo is internal-unmapped;
+      // anything resolving to node_modules / lib types is an expected external.
+      st.total++;
       if (toId && toId !== fromId) {
+        st.resolved++;
         edges.push({
           from: fromId,
           to: toId,
           kind: "call",
           line: call.getStartLineNumber(),
         });
+      } else if (toId === fromId) {
+        st.skippedSelf++;
+      } else if (targetsInRepo(call, repoRoot)) {
+        st.skippedAmbiguous++; // internal-unresolved (mirrors the Go/native bucket)
+      } else {
+        st.unresolved++; // external / library / runtime
       }
 
       const consume = detectConsume(call, fromId);
@@ -392,6 +405,29 @@ function resolveCallTarget(
     }
   }
   return undefined;
+}
+
+/**
+ * Does an unresolved call's callee declare inside the repo (not node_modules)?
+ * True → it targets in-repo code we didn't map to a node (internal-unresolved);
+ * false → a library/runtime call (external). Used only for coverage (ADR 0013).
+ */
+function targetsInRepo(call: CallExpression, repoRoot: string): boolean {
+  let symbol;
+  try {
+    symbol = call.getExpression().getSymbol();
+    if (symbol) symbol = symbol.getAliasedSymbol() ?? symbol;
+  } catch {
+    return false;
+  }
+  if (!symbol) return false;
+  const root = toPosix(repoRoot);
+  for (const decl of symbol.getDeclarations()) {
+    const fp = toPosix(decl.getSourceFile().getFilePath());
+    if (fp.includes("/node_modules/")) continue;
+    if (fp.startsWith(root)) return true;
+  }
+  return false;
 }
 
 function isInRepo(filePath: string, repoRoot: string): boolean {

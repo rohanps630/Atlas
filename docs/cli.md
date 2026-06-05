@@ -35,8 +35,10 @@ bare `atlas` in a terminal opens this menu; piped/non-interactive `atlas` prints
 ### `atlas status [<workspace>]`
 The dashboard. Prints version, schema version, data-store path, current phase, then every
 workspace with its repos, per-repo counts (functions · calls · consumes · exposes), per-repo
-language breakdown, when each was last scanned, cross-repo link / external-endpoint totals, and
-whether the agent docs are generated. Pass a workspace name to show only that one.
+language breakdown, call-resolution coverage (the share of in-repo calls that resolved into the
+graph — a hint for how complete `impact`/`path` are; ADR 0013), when each was last scanned,
+cross-repo link / external-endpoint totals, and whether the agent docs are generated. Pass a
+workspace name to show only that one.
 
 ### `atlas detect <repo-path> [--json]`
 Print the stack atlas infers for a repo — languages, frameworks, suggested role, workspace
@@ -73,7 +75,8 @@ endpoints (consumed but exposed by no repo in the workspace — the "missing bac
 ### `atlas agent [--workspace <ws>]`
 Generate the agent artifacts into the data store and print wiring instructions:
 - `architecture.md` — orientation (hubs, suggested questions), conventions (per-layer naming +
-  exemplar file), landmines (TODO/FIXME/HACK/WHY), the Mermaid system diagram, and externals.
+  exemplar file), call-resolution coverage (ADR 0013), landmines (TODO/FIXME/HACK/WHY), the
+  Mermaid system diagram, and externals.
 - `atlas.steering.md` — always-on agent context (what atlas is, when to use it, the detected
   stack). Wire it into a repo's `CLAUDE.md` with `@<path>`.
 

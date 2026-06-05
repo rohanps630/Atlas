@@ -13,6 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
 import type { DetectionResult } from "./detect.js";
+import type { CallResolution } from "../extractors/shared/resolve.js";
 
 export function storeRoot(): string {
   return process.env.ATLAS_HOME || path.join(os.homedir(), ".atlas");
@@ -94,6 +95,21 @@ export function readDetection(workspace: string, repoId: string): DetectionResul
   if (!fs.existsSync(file)) return undefined;
   try {
     return JSON.parse(fs.readFileSync(file, "utf8")) as DetectionResult;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Per-repo call-resolution coverage (generated data, ADR 0013 — not a contract). */
+export function writeResolution(workspace: string, repoId: string, r: CallResolution): string {
+  return writeJson(path.join(workspaceDir(workspace), `${repoId}.resolution.json`), r);
+}
+
+export function readResolution(workspace: string, repoId: string): CallResolution | undefined {
+  const file = path.join(workspaceDir(workspace), `${repoId}.resolution.json`);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as CallResolution;
   } catch {
     return undefined;
   }
