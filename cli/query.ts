@@ -106,6 +106,31 @@ export function queryImpact(
   return { query, resolvedAs, targets, callers, crossRepo, truncated };
 }
 
+/**
+ * Impact over an explicit set of target node ids (ADR 0017) — the diff-driven
+ * entry point. Same shape as `queryImpact`, but targets are given, not resolved
+ * from a query string. `repo` must be the repo the targets belong to.
+ */
+export function impactForTargets(
+  workspace: string,
+  repo: string,
+  targetIds: string[],
+  opts: { maxDepth?: number; limit?: number } = {},
+): ImpactResult {
+  const graph = buildGraph(readTopology(workspace, repo));
+  const targets = targetIds.map((id) => graph.node(id)).filter((n): n is AtlasNode => !!n);
+  const all = transitiveCallers(graph, targets.map((t) => t.id), { maxDepth: opts.maxDepth });
+  const affected = new Set<string>([...targets.map((t) => t.id), ...all.map((c) => c.id)]);
+  let crossRepo: CrossRepoEdge[] = [];
+  try {
+    crossRepo = readMap(workspace).crossRepoEdges.filter((e) => affected.has(e.to));
+  } catch {
+    /* no map */
+  }
+  const { items: callers, truncated } = cap(all, opts.limit ?? DEFAULT_LIMIT);
+  return { query: `${targets.length} changed function(s)`, resolvedAs: "symbol", targets, callers, crossRepo, truncated };
+}
+
 export function queryEndpoints(workspace?: string): MergedMap {
   return readMap(pickWorkspace(workspace));
 }

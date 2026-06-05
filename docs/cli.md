@@ -63,6 +63,19 @@ Exit `2` if nothing matched.
 (via the merged map). `--depth` bounds how far callers are walked; `--limit` caps how many are
 returned (prints "+N more"). Exit `2` if unresolved.
 
+**`atlas impact --diff [--base <ref>] [--repo <id>] [-w <ws>] [--depth N] [--limit N] [--json]`**
+— the blast radius of a whole change (ADR 0017). Reads `git diff <base>` (default `HEAD`;
+`--base main` for a branch's changes) in the repo, maps changed lines to the functions that own
+them, and runs impact over all of them. The repo is `--repo`, else the workspace repo containing
+the current dir. Prints nothing affected (exit `0`) when the diff touches no mapped functions.
+
+### `atlas viz [--workspace <ws>] [--repo <id>] [--out <file>]`
+Render an **interactive, self-contained HTML** map of the workspace graph (ADR 0018): connected
+nodes (isolated ones dropped) coloured by repo, sized by degree, with cross-repo HTTP edges
+highlighted; pan/zoom, hover for detail, type to search-highlight. Deterministic layout, no CDN
+or network (opens offline, NDA-safe). Writes to `~/.atlas/<ws>/graph.html` (or `graph.<repo>.html`
+with `--repo`, or `--out <file>`). A richer companion to `architecture.md`'s static Mermaid diagram.
+
 ### `atlas path <A> <B> [--workspace <ws>] [--max <hops>] [--json]`
 Shortest connection between two symbols/files across the whole workspace — spanning call edges
 and cross-repo HTTP contracts. Answers "how does A reach B" in one query. `--max` caps path
