@@ -47,7 +47,8 @@ node bin/atlas.js menu                            # interactive menu — pick an
 ```
 
 Full command reference: [`docs/cli.md`](docs/cli.md). How it all fits together:
-[`docs/how-it-works.md`](docs/how-it-works.md).
+[`docs/how-it-works.md`](docs/how-it-works.md). Setting up on a new machine:
+[`docs/setup.md`](docs/setup.md).
 
 `scan` reads each repo (never modifies it) and writes only to `~/.atlas/<workspace>/`
 (override the store root with `ATLAS_HOME`). It auto-detects languages: TypeScript/JS plus
