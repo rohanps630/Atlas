@@ -57,6 +57,14 @@ export function extractGo(opts: GoExtractOptions, stats?: ResolutionStats): Extr
   // Struct field types, repo-wide: Type -> field -> field's type name. Lets the
   // receiver layer walk a dispatch chain (`s.deps.Auth.Register()`) to a type.
   const structFields = new Map<string, Map<string, string>>();
+  // Deeper receiver typing (ADR 0015): every declared type name (so a receiver
+  // typed to a non-repo type is classified external, not internal-unresolved);
+  // function/method result types (for `x := f()` / `x := r.m()`); and
+  // package-level `var` types (a fallback when an identifier isn't a local).
+  const repoTypes = new Set<string>();
+  const funcResult = new Map<string, string>(); // func name -> first result type
+  const methodResult = new Map<string, string>(); // "Type.method" -> first result type
+  const pkgVarType = new Map<string, string>(); // package-level var name -> type
   const constNodes = new Map<string, any>(); // const name -> value node
   const perFile: { rel: string; root: any; fdToId: Map<number, string> }[] = [];
 
@@ -80,8 +88,10 @@ export function extractGo(opts: GoExtractOptions, stats?: ResolutionStats): Extr
 
     for (const ts of descendants(tree.rootNode, "type_spec")) {
       const tname = ts.childForFieldName("name")?.text;
+      if (!tname) continue;
+      repoTypes.add(tname);
       const body = ts.childForFieldName("type");
-      if (!tname || body?.type !== "struct_type" || structFields.has(tname)) continue;
+      if (body?.type !== "struct_type" || structFields.has(tname)) continue;
       const fields = new Map<string, string>();
       const list = namedChildrenOfType(body, "field_declaration_list")[0];
       for (const fd of list ? namedChildrenOfType(list, "field_declaration") : []) {
@@ -90,6 +100,15 @@ export function extractGo(opts: GoExtractOptions, stats?: ResolutionStats): Extr
         for (const id of namedChildrenOfType(fd, "field_identifier")) fields.set(id.text, ft);
       }
       if (fields.size) structFields.set(tname, fields);
+    }
+
+    // Package-level `var x T` → x's type (explicit types only; order-independent).
+    for (const vd of namedChildrenOfType(tree.rootNode, "var_declaration")) {
+      for (const vs of namedChildrenOfType(vd, "var_spec")) {
+        const t = goTypeName(vs.childForFieldName("type"));
+        if (!t) continue;
+        for (const id of namedChildrenOfType(vs, "identifier")) if (!pkgVarType.has(id.text)) pkgVarType.set(id.text, t);
+      }
     }
 
     const fdToId = new Map<number, string>();
@@ -106,11 +125,17 @@ export function extractGo(opts: GoExtractOptions, stats?: ResolutionStats): Extr
       push(byShortName, shortName(name), id);
       push(byFullName, name, id);
       if (!name.includes(".")) pushNested(funcByPkg, posixDir(rel), name, id);
+      const rt = firstResultType(fn);
+      if (rt) {
+        if (name.includes(".")) { if (!methodResult.has(name)) methodResult.set(name, rt); }
+        else if (!funcResult.has(name)) funcResult.set(name, rt);
+      }
     }
     perFile.push({ rel, root: tree.rootNode, fdToId });
   }
 
   const resolveConst = makeConstResolver(constNodes);
+  const types: GoTypes = { structFields, funcResult, methodResult, pkgVarType };
 
   // Pass 2: call edges + chi exposes.
   const envCache = new Map<number, Map<string, string>>(); // func node id -> var -> type
@@ -136,11 +161,22 @@ export function extractGo(opts: GoExtractOptions, stats?: ResolutionStats): Extr
       const layers: Layer[] = [];
       if (method) {
         // `recv.method(...)` — infer the receiver expression's type (a local var,
-        // or a field-dispatch chain like `s.deps.Auth`) to pin the exact
-        // `Type.method`, then fall back to the global short name (today's behavior).
+        // field-dispatch chain, package var, or `:=`/range binding) to pin the
+        // exact `Type.method`.
         const operand = fnNode.childForFieldName("operand");
-        const t = goExprType(operand, goEnvFor(encNode, envCache), structFields);
-        if (t) layers.push({ via: "receiver", candidates: byFullName.get(`${t}.${method}`) ?? [] });
+        const t = goExprType(operand, goEnvFor(encNode, envCache, types), types);
+        const full = t ? byFullName.get(`${t}.${method}`) : undefined;
+        if (full && full.length) {
+          layers.push({ via: "receiver", candidates: full });
+        } else if (t && !repoTypes.has(t)) {
+          // Receiver is a known *non-repo* type (sql.DB, gin.Context, …): the
+          // method is external. Don't fall through to the global short name —
+          // that would mis-bucket it as an ambiguous internal call (ADR 0015).
+          resolveCall(fromId, [], st); // counts as external/unresolved
+          continue;
+        }
+        // Unknown receiver type, or a repo type whose method we didn't find
+        // (embedded/elsewhere): fall back to the global short name (ADR 0012).
         layers.push({ via: "global", candidates: byShortName.get(method) ?? [] });
       } else {
         // bare `f(...)` — a function in the caller's own package, then global.
@@ -299,93 +335,170 @@ function enclosingFuncNode(node: any): any | undefined {
   return undefined;
 }
 
+/** Repo-wide type knowledge threaded into the per-function env + receiver typing. */
+interface GoTypes {
+  structFields: Map<string, Map<string, string>>;
+  funcResult: Map<string, string>;
+  methodResult: Map<string, string>;
+  pkgVarType: Map<string, string>;
+}
+
 /**
  * Lightweight, syntactic per-function type environment: variable name → type
- * name, from the method receiver, parameters, and `var`/`:=` declarations whose
- * type is statically visible (a named type or a `T{}`/`&T{}` composite literal).
- * Not a type checker — interface values, returns of other calls, and embedded
- * promotion are simply absent, so those calls fall through to the next layer.
+ * name, from the method receiver, parameters, `var`/`:=` declarations, the result
+ * type of `:=` from a call (`x := f()` / `x := r.m()`), and two-variable `range`
+ * element types. Not a type checker — interface values, generics, multi-return,
+ * and embedded promotion are simply absent, so those calls fall through.
  */
-function goEnvFor(fn: any, cache: Map<number, Map<string, string>>): Map<string, string> {
+function goEnvFor(fn: any, cache: Map<number, Map<string, string>>, T: GoTypes): Map<string, string> {
   const cached = cache.get(fn.id);
   if (cached) return cached;
   const env = new Map<string, string>();
-  addGoParams(fn.childForFieldName("receiver"), env);
-  addGoParams(fn.childForFieldName("parameters"), env);
+  const elem = new Map<string, string>(); // var -> element type, for `range`
+  addGoParams(fn.childForFieldName("receiver"), env, elem);
+  addGoParams(fn.childForFieldName("parameters"), env, elem);
   const body = fn.childForFieldName("body");
   if (body) {
-    for (const d of descendants(body, "short_var_declaration")) addGoAssign(d, env);
-    for (const spec of descendants(body, "var_spec")) addGoVarSpec(spec, env);
+    // Assignments first (document order), so chains like `a := f(); b := a.m()`
+    // and `items := []T{}` populate the env before `range items` reads it.
+    for (const d of descendants(body, "short_var_declaration")) addGoAssign(d, env, elem, T);
+    for (const spec of descendants(body, "var_spec")) addGoVarSpec(spec, env, elem, T);
+    for (const rc of descendants(body, "range_clause")) addGoRange(rc, env, elem);
   }
   cache.set(fn.id, env);
   return env;
 }
 
-/** Bind each `name: Type` in a parameter_list (receiver or params). */
-function addGoParams(list: any, env: Map<string, string>): void {
+/** Bind each `name: Type` in a parameter_list (receiver or params), incl. `[]T`. */
+function addGoParams(list: any, env: Map<string, string>, elem: Map<string, string>): void {
   if (!list) return;
   for (const decl of namedChildrenOfType(list, "parameter_declaration")) {
-    const t = goTypeName(decl.childForFieldName("type"));
-    if (!t) continue;
+    const typeNode = decl.childForFieldName("type");
+    const t = goTypeName(typeNode);
+    const el = goElemType(typeNode);
     for (let i = 0; i < decl.namedChildCount; i++) {
       const c = decl.namedChild(i);
-      if (c.type === "identifier") env.set(c.text, t);
+      if (c.type !== "identifier") continue;
+      if (t) env.set(c.text, t);
+      if (el) elem.set(c.text, el);
     }
   }
 }
 
-/** Bind `x := T{}` / `x := &T{}` (left/right matched by position). */
-function addGoAssign(decl: any, env: Map<string, string>): void {
+/** Bind `x := <expr>` — struct/composite, `&T{}`, or a call's result type. */
+function addGoAssign(decl: any, env: Map<string, string>, elem: Map<string, string>, T: GoTypes): void {
   const left = decl.childForFieldName("left");
   const right = decl.childForFieldName("right");
   if (!left || !right) return;
   for (let i = 0; i < left.namedChildCount; i++) {
     const lhs = left.namedChild(i);
     if (lhs.type !== "identifier") continue;
-    const t = inferGoExprType(right.namedChild(i));
+    const rhs = right.namedChild(i);
+    const t = goExprType(rhs, env, T);
     if (t) env.set(lhs.text, t);
+    const el = containerElem(rhs);
+    if (el) elem.set(lhs.text, el);
   }
 }
 
-/** Bind `var x T` / `var x = T{}`. */
-function addGoVarSpec(spec: any, env: Map<string, string>): void {
-  const t = goTypeName(spec.childForFieldName("type")) ?? inferGoExprType(spec.childForFieldName("value"));
-  if (!t) return;
+/** Bind `var x T` / `var x = T{}` (and `var xs []T` for range). */
+function addGoVarSpec(spec: any, env: Map<string, string>, elem: Map<string, string>, T: GoTypes): void {
+  const typeNode = spec.childForFieldName("type");
+  const value = spec.childForFieldName("value");
+  const t = goTypeName(typeNode) ?? goExprType(value, env, T);
+  const el = goElemType(typeNode) ?? containerElem(value);
   for (let i = 0; i < spec.namedChildCount; i++) {
     const c = spec.namedChild(i);
-    if (c.type === "identifier") env.set(c.text, t);
+    if (c.type !== "identifier") continue;
+    if (t) env.set(c.text, t);
+    if (el) elem.set(c.text, el);
   }
 }
 
-/** Static type of an initializer expression we can see: `T{}` / `&T{}`. */
-function inferGoExprType(node: any): string | undefined {
+/** `for i, x := range coll` → bind x to coll's element type (two-var form only). */
+function addGoRange(rc: any, env: Map<string, string>, elem: Map<string, string>): void {
+  const left = rc.childForFieldName("left") ?? namedChildrenOfType(rc, "expression_list")[0];
+  const right = rc.childForFieldName("right") ?? rc.namedChild(rc.namedChildCount - 1);
+  if (!left) return;
+  const idents = namedChildrenOfType(left, "identifier");
+  // Single-var range yields the index/key, not the element — skip it.
+  if (idents.length < 2) return;
+  const valVar = idents[idents.length - 1];
+  if (!valVar || valVar.text === "_") return;
+  let elemType: string | undefined;
+  if (right?.type === "identifier") elemType = elem.get(right.text);
+  else if (right?.type === "composite_literal") elemType = goElemType(right.childForFieldName("type"));
+  if (elemType) env.set(valVar.text, elemType);
+}
+
+/** Element type of a `range` source expression we can see: a `[]T{}` literal. */
+function containerElem(node: any): string | undefined {
+  const n = unwrapValue(node);
+  return n?.type === "composite_literal" ? goElemType(n.childForFieldName("type")) : undefined;
+}
+
+function unwrapValue(node: any): any {
   if (!node) return undefined;
-  if (node.type === "expression_list") return inferGoExprType(node.namedChild(0));
-  if (node.type === "unary_expression") return inferGoExprType(node.namedChild(0)); // &T{}
-  if (node.type === "parenthesized_expression") return inferGoExprType(node.namedChild(0));
-  if (node.type === "composite_literal") return goTypeName(node.childForFieldName("type"));
-  return undefined;
+  if (node.type === "expression_list") return unwrapValue(node.namedChild(0));
+  if (node.type === "unary_expression") return unwrapValue(node.namedChild(0));
+  if (node.type === "parenthesized_expression") return unwrapValue(node.namedChild(0));
+  return node;
 }
 
 /**
- * Static type of a receiver expression: a local variable (`s`), or a chain of
- * struct-field accesses (`s.deps.Auth`) walked through the repo-wide field map.
- * Returns undefined for anything not statically visible (package selectors,
- * call returns, interface values) → the call falls through to the global layer.
+ * Static type of an expression we can see: a local/package variable, a struct-
+ * field chain (`s.deps.Auth`), a `T{}`/`&T{}` literal, or the result type of a
+ * call (`f()` / `r.m()`). Undefined for anything not statically visible (package
+ * selectors, interface values, generics) → the call falls through to the next layer.
  */
-function goExprType(
-  node: any,
-  env: Map<string, string>,
-  structFields: Map<string, Map<string, string>>,
-): string | undefined {
-  if (!node) return undefined;
-  if (node.type === "identifier") return env.get(node.text);
-  if (node.type === "parenthesized_expression") return goExprType(node.namedChild(0), env, structFields);
-  if (node.type === "selector_expression") {
-    const base = goExprType(node.childForFieldName("operand"), env, structFields);
-    const field = node.childForFieldName("field")?.text;
-    return base && field ? structFields.get(base)?.get(field) : undefined;
+function goExprType(node: any, env: Map<string, string>, T: GoTypes): string | undefined {
+  const n = node?.type === "expression_list" ? node.namedChild(0) : node;
+  if (!n) return undefined;
+  switch (n.type) {
+    case "identifier":
+      return env.get(n.text) ?? T.pkgVarType.get(n.text);
+    case "parenthesized_expression":
+    case "unary_expression":
+      return goExprType(n.namedChild(0), env, T);
+    case "composite_literal":
+      return goTypeName(n.childForFieldName("type"));
+    case "selector_expression": {
+      const base = goExprType(n.childForFieldName("operand"), env, T);
+      const field = n.childForFieldName("field")?.text;
+      return base && field ? T.structFields.get(base)?.get(field) : undefined;
+    }
+    case "call_expression": {
+      const fn = n.childForFieldName("function");
+      if (fn?.type === "identifier") return T.funcResult.get(fn.text);
+      if (fn?.type === "selector_expression") {
+        const recv = goExprType(fn.childForFieldName("operand"), env, T);
+        const m = fn.childForFieldName("field")?.text;
+        return recv && m ? T.methodResult.get(`${recv}.${m}`) : undefined;
+      }
+      return undefined;
+    }
+    default:
+      return undefined;
   }
+}
+
+/** First result type of a function/method signature (single or first-of-many). */
+function firstResultType(fn: any): string | undefined {
+  const res = fn.childForFieldName("result");
+  if (!res) return undefined;
+  if (res.type === "parameter_list") {
+    const pd = namedChildrenOfType(res, "parameter_declaration")[0];
+    return pd ? goTypeName(pd.childForFieldName("type")) : undefined;
+  }
+  return goTypeName(res);
+}
+
+/** Element type of a container type node (`[]T` / `[N]T` / `map[K]T` → `T`). */
+function goElemType(t: any): string | undefined {
+  if (!t) return undefined;
+  if (t.type === "slice_type") return goTypeName(t.childForFieldName("element") ?? t.namedChild(0));
+  if (t.type === "array_type") return goTypeName(t.childForFieldName("element"));
+  if (t.type === "map_type") return goTypeName(t.childForFieldName("value"));
   return undefined;
 }
 
