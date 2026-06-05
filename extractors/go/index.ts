@@ -84,14 +84,15 @@ export function extractGo(opts: GoExtractOptions): ExtractorOutput {
   const resolveConst = makeConstResolver(constNodes);
 
   // Pass 2: call edges + chi exposes.
-  for (const { fdToId, root: fileRoot } of perFile) {
+  for (const { rel, fdToId, root: fileRoot } of perFile) {
+    const moduleId = `${opts.repoId}:${rel}`;
     for (const call of descendants(fileRoot, "call_expression")) {
       const fnNode = call.childForFieldName("function");
       const method = selectorField(fnNode);
 
       // chi expose: r.<VERB>("/path", handler)
       if (method && HTTP_VERBS.has(method)) {
-        const expose = chiExpose(call, method, fdToId, byShortName, byFullName, resolveConst);
+        const expose = chiExpose(call, method, moduleId, byShortName, byFullName, resolveConst);
         if (expose) exposes.push(expose);
       }
 
@@ -122,7 +123,7 @@ export function extractGo(opts: GoExtractOptions): ExtractorOutput {
 function chiExpose(
   call: any,
   method: string,
-  fdToId: Map<number, string>,
+  moduleId: string,
   byShortName: Map<string, string[]>,
   byFullName: Map<string, string[]>,
   resolveConst: (node: any) => string | undefined,
@@ -154,8 +155,9 @@ function chiExpose(
 
   // Handler = 2nd arg. Prefer a precise "Type.method" match (e.g.
   // deps.AdminHandler.ListClinics → AdminHandler.ListClinics), then a unique
-  // short name, else the enclosing function where the route is registered.
-  let handler = enclosingFuncId(call, fdToId) ?? "";
+  // short name. If neither resolves (inline/ambiguous handler), point at the
+  // file's module node — honest "registered here", not a wrong function.
+  let handler = moduleId;
   const handlerArg = args?.namedChild(1);
   const full2 = typeMethodName(handlerArg);
   const short = selectorField(handlerArg) ?? identifierName(handlerArg);

@@ -1,6 +1,6 @@
 {
   "name": "atlas",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Local-first structured cross-repo map for AI coding agents.",
   "type": "module",
   "bin": {

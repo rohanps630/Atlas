@@ -20,7 +20,7 @@ import { linkRepos } from "../core/link.js";
 import { systemDiagram } from "../core/mermaid.js";
 import { Graph } from "../core/graph.js";
 import { topHubs, suggestedQuestions } from "../core/orientation.js";
-import { conventions, type LayerConvention } from "../core/conventions.js";
+import { conventions } from "../core/conventions.js";
 import { collectLandmines } from "./landmines.js";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
 import {

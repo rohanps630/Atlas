@@ -2,6 +2,15 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [0.1.0] — 2026-06-05
+
+First tagged checkpoint. Phases 1–3 complete and Phase 4 in progress: a local-first,
+polyglot (TypeScript, Swift, Kotlin, Go) cross-repo map with contract linking, impact and
+path queries, an MCP server + steering for agents, auto-detection, and a conventions/landmines
+surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the core
+(graph/linker/impact/path) never depends on any language. The sections below are the detailed
+history that rolls up into this release.
+
 ## [Unreleased] — Conventions / golden-files surface
 
 Adapted from codebase-context (the one genuinely new idea across the tool-comparison
