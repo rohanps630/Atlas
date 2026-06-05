@@ -43,6 +43,7 @@ node bin/atlas.js path createOrder save -w myapp  # shortest connection between 
 node bin/atlas.js endpoints -w myapp              # cross-repo links + external endpoints
 
 node bin/atlas.js status                          # dashboard: workspaces, repos, counts, freshness
+node bin/atlas.js menu                            # interactive menu — pick an action by number
 ```
 
 Full command reference: [`docs/cli.md`](docs/cli.md). How it all fits together:

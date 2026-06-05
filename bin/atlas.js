@@ -14,6 +14,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // from the CLI itself, but they are not implemented yet.
 const COMMANDS = {
   status:   { phase: 0, available: true,  desc: "Dashboard: workspaces, repos, counts, freshness, wiring" },
+  menu:     { phase: 0, available: true,  desc: "Interactive menu — pick an action by number (friendly mode)" },
   detect:   { phase: 4, available: true,  desc: "Detect a repo's languages, frameworks, and role" },
   scan:     { phase: 1, available: true,  desc: "Scan a repo (auto-detects stack) and write its topology" },
   context:  { phase: 1, available: true,  desc: "Emit a focused context pack (target + callers + callees)" },
@@ -39,6 +40,7 @@ const ROUTES = {
   detect:    { mod: "dist/cli/detect-cmd.js", fn: "runDetect" },
   hook:      { mod: "dist/cli/hook.js",      fn: "runHook" },
   status:    { mod: "dist/cli/status.js",    fn: "runStatus" },
+  menu:      { mod: "dist/cli/menu.js",      fn: "runMenu" },
 };
 
 async function route(cmd, args) {
@@ -70,26 +72,32 @@ Docs: start with README.md, then AGENTS.md if you're an agent continuing develop
 
 const [cmd, ...args] = process.argv.slice(2);
 
-if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
+if (cmd === "--help" || cmd === "-h" || cmd === "help") {
   printHelp();
   process.exit(0);
+}
+// Bare `atlas` in a terminal opens the interactive menu; piped/non-TTY shows help.
+let command = cmd;
+if (!command) {
+  if (process.stdin.isTTY) command = "menu";
+  else { printHelp(); process.exit(0); }
 }
 if (cmd === "--version" || cmd === "-v") {
   console.log(VERSION);
   process.exit(0);
 }
 
-const entry = COMMANDS[cmd];
+const entry = COMMANDS[command];
 if (!entry) {
-  console.error(`Unknown command: ${cmd}\n`);
+  console.error(`Unknown command: ${command}\n`);
   printHelp();
   process.exit(1);
 }
 if (!entry.available) {
-  console.error(`'${cmd}' is planned for Phase ${entry.phase} and isn't implemented yet.`);
+  console.error(`'${command}' is planned for Phase ${entry.phase} and isn't implemented yet.`);
   console.error(`See docs/phases.md. If you're building it, read AGENTS.md first.`);
   process.exit(2);
 }
-if (ROUTES[cmd]) {
-  await route(cmd, args);
+if (ROUTES[command]) {
+  await route(command, args);
 }

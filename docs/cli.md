@@ -26,6 +26,12 @@ Run `atlas --help` for the one-line command list, `atlas --version` for the vers
 
 ## Commands
 
+### `atlas menu`
+An interactive, numbered menu over the common actions (status, context, impact, path,
+endpoints, scan, refresh, agent, detect). Pick a number; it prompts for the few inputs each
+needs (picking a workspace from a list) and runs it, then loops. `0`/`q`/Ctrl-D quits. Running
+bare `atlas` in a terminal opens this menu; piped/non-interactive `atlas` prints help instead.
+
 ### `atlas status [<workspace>]`
 The dashboard. Prints version, schema version, data-store path, current phase, then every
 workspace with its repos, per-repo counts (functions · calls · consumes · exposes), per-repo

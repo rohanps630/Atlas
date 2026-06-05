@@ -11,6 +11,12 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Interactive menu
+
+- `atlas menu` (`cli/menu.ts`): a numbered, interactive menu over the common actions; prompts
+  for inputs (workspace pickers) and delegates to the existing run* functions. Bare `atlas` in
+  a terminal opens it; non-interactive `atlas` still prints help. Pure UX, no new analysis.
+
 ## [Unreleased] — Status dashboard + reference docs
 
 - `atlas status [<workspace>]` is now a dashboard (`cli/status.ts`): version/schema/store,
