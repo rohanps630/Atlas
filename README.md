@@ -248,9 +248,10 @@ Read in this order:
 4. [`docs/schema.md`](docs/schema.md) — the keystone data contract (a versioned public API).
 5. [`docs/adr/`](docs/adr/) — why each major decision was made.
 6. [`docs/rejected.md`](docs/rejected.md) — what was deliberately *not* built, and why.
-7. [`docs/how-it-works.md`](docs/how-it-works.md) — the end-to-end pipeline.
-8. [`docs/cli.md`](docs/cli.md) — the full command reference.
-9. [`docs/setup.md`](docs/setup.md) — installing & sharing across machines/OSes.
+7. [`docs/backlog.md`](docs/backlog.md) — salvaged-but-not-yet-earned ideas (build when a real need appears).
+8. [`docs/how-it-works.md`](docs/how-it-works.md) — the end-to-end pipeline.
+9. [`docs/cli.md`](docs/cli.md) — the full command reference.
+10. [`docs/setup.md`](docs/setup.md) — installing & sharing across machines/OSes.
 
 ## Development
 
