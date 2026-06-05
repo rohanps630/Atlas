@@ -1,13 +1,14 @@
 /**
- * Swift & Kotlin extractor (tree-sitter, per ADR 0008).
+ * Generic tree-sitter extractor (per ADR 0008), driven by a language registry.
  *
- * One generic tree-sitter extractor for both languages — their grammars share
- * the node types we need (`function_declaration`, `call_expression`,
- * `class_declaration`, `navigation_expression`). Emits the same normalized JSON
- * as every other extractor (schema.md §2): `module` + `function` nodes and
- * name-resolved `call` edges. No type checker, so calls resolve by name within
- * the repo (the map is a hint — philosophy #5); ambiguous names are skipped to
- * avoid misleading edges. Scope: functions + calls, mirroring the Phase 1 TS extractor.
+ * Emits the normalized schema (schema.md §2): `module` + `function` nodes and
+ * name-resolved `call` edges. No type checker, so calls resolve by unique short
+ * name within the repo (a hint — philosophy #5); ambiguous names are skipped.
+ *
+ * Adding a language = one `LANGUAGES` entry (install its tree-sitter grammar and
+ * give the node-type names). Languages that follow the common
+ * `function_declaration` / `call_expression` shape (Swift, Kotlin, …) reuse the
+ * defaults below; others override the node-type fields. See extractors/README.md.
  */
 
 import * as fs from "node:fs";
@@ -23,12 +24,44 @@ import {
   type ExtractorOutput,
 } from "../../core/schema.js";
 
+/** Per-language tree-sitter node-type config. */
+export interface LangSpec {
+  grammar: unknown;
+  exts: string[];
+  funcType: string;          // function declaration node
+  callType: string;          // call expression node
+  classScopeTypes: string[]; // nodes that introduce a Type scope (for `Type.method`)
+  nameTypes: string[];       // identifier node(s) used for names / direct callees
+  classNameTypes: string[];  // identifier node(s) for a class/type name
+  memberType: string;        // member-access expression (e.g. `a.b`)
+  memberSuffixType: string;  // the trailing `.b` part of a member access
+  retrofit?: boolean;        // extract Kotlin Retrofit `consumes`
+}
+
+// Swift and Kotlin share the same node-type names for what we need.
+const COMMON = {
+  funcType: "function_declaration",
+  callType: "call_expression",
+  classScopeTypes: ["class_declaration"],
+  nameTypes: ["simple_identifier"],
+  classNameTypes: ["type_identifier", "simple_identifier"],
+  memberType: "navigation_expression",
+  memberSuffixType: "navigation_suffix",
+};
+
+export const LANGUAGES: Record<string, LangSpec> = {
+  swift: { grammar: Swift, exts: [".swift"], ...COMMON },
+  kotlin: { grammar: Kotlin, exts: [".kt"], ...COMMON, retrofit: true },
+};
+
+export type NativeLanguage = string;
+
+/** Languages this extractor supports (registry keys) — used to auto-wire scan. */
+export function nativeLanguages(): string[] {
+  return Object.keys(LANGUAGES);
+}
+
 const RETROFIT_VERBS = new Set(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]);
-
-export type NativeLanguage = "swift" | "kotlin";
-
-const GRAMMAR: Record<NativeLanguage, unknown> = { swift: Swift, kotlin: Kotlin };
-const EXT: Record<NativeLanguage, string> = { swift: ".swift", kotlin: ".kt" };
 // Build/vendor dirs that contain generated or third-party native code.
 const IGNORE_DIRS = new Set([
   "node_modules", "Pods", "build", ".gradle", "DerivedData",
@@ -42,21 +75,22 @@ export interface NativeExtractOptions {
 }
 
 export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
+  const spec = LANGUAGES[opts.language];
+  if (!spec) throw new Error(`No native language spec for "${opts.language}"`);
+
   const root = path.resolve(opts.repoPath);
   const parser = new Parser();
-  parser.setLanguage(GRAMMAR[opts.language]);
+  parser.setLanguage(spec.grammar);
 
-  const files = walk(root, EXT[opts.language]);
+  const files = walk(root, spec.exts);
   const nodes: AtlasNode[] = [];
   const edges: AtlasEdge[] = [];
   const takenIds = new Set<string>();
   const byShortName = new Map<string, string[]>(); // short fn name -> node ids
-  // Per file: the parse tree + a map from function_declaration node id -> our node id.
   const perFile: { rel: string; root: any; fdToId: Map<number, string> }[] = [];
-  // Kotlin `(const) val NAME = "..."` map (short name -> raw value, may contain ${...}).
-  const constMap = new Map<string, string>();
+  const constMap = new Map<string, string>(); // Kotlin `val NAME = "..."` map
 
-  // Pass 1: nodes.
+  // Pass 1: module + function nodes.
   for (const file of files) {
     const rel = toPosix(path.relative(root, file));
     const moduleId = `${opts.repoId}:${rel}`;
@@ -66,12 +100,13 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
     }
 
     const src = fs.readFileSync(file, "utf8");
-    if (opts.language === "kotlin") collectConsts(src, constMap);
+    if (spec.retrofit) collectConsts(src, constMap);
     const tree = parseFile(parser, src, rel);
     if (!tree) continue; // unparseable file — skip, don't fail the whole scan
+
     const fdToId = new Map<number, string>();
-    for (const fd of descendants(tree.rootNode, "function_declaration")) {
-      const name = functionName(fd);
+    for (const fd of descendants(tree.rootNode, spec.funcType)) {
+      const name = functionName(fd, spec);
       if (!name) continue;
       const id = uniqueId(`${opts.repoId}:${rel}#${name}`, takenIds);
       takenIds.add(id);
@@ -84,10 +119,10 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
 
   // Pass 2: call edges (resolved by unique short name within the repo).
   for (const { root: fileRoot, fdToId } of perFile) {
-    for (const call of descendants(fileRoot, "call_expression")) {
-      const fromId = enclosingFunctionId(call, fdToId);
+    for (const call of descendants(fileRoot, spec.callType)) {
+      const fromId = enclosingFunctionId(call, fdToId, spec);
       if (!fromId) continue;
-      const callee = calleeName(call);
+      const callee = calleeName(call, spec);
       if (!callee) continue;
       const matches = byShortName.get(callee);
       if (!matches || matches.length !== 1) continue; // unresolved or ambiguous → skip
@@ -97,12 +132,12 @@ export function extractNative(opts: NativeExtractOptions): ExtractorOutput {
     }
   }
 
-  // Pass 3 (Kotlin only): Retrofit `consumes` from @GET/@POST/... annotations.
+  // Pass 3 (Retrofit langs): `consumes` from @GET/@POST/... annotations.
   const consumes: ConsumedEndpoint[] = [];
-  if (opts.language === "kotlin") {
+  if (spec.retrofit) {
     const resolveConst = makeConstResolver(constMap);
     for (const { root: fileRoot, fdToId } of perFile) {
-      for (const fd of descendants(fileRoot, "function_declaration")) {
+      for (const fd of descendants(fileRoot, spec.funcType)) {
         const c = retrofitConsume(fd, fdToId, resolveConst);
         if (c) consumes.push(c);
       }
@@ -213,16 +248,24 @@ function firstChildOfType(node: any, type: string): any | undefined {
   return undefined;
 }
 
+function firstChildOfTypes(node: any, types: string[]): any | undefined {
+  for (const t of types) {
+    const c = firstChildOfType(node, t);
+    if (c) return c;
+  }
+  return undefined;
+}
+
 /** Function name, qualified with its enclosing class/struct (e.g. `Foo.bar`). */
-function functionName(fd: any): string | undefined {
-  const nameNode = fd.childForFieldName?.("name") ?? firstChildOfType(fd, "simple_identifier");
+function functionName(fd: any, spec: LangSpec): string | undefined {
+  const nameNode = fd.childForFieldName?.("name") ?? firstChildOfTypes(fd, spec.nameTypes);
   if (!nameNode) return undefined;
   const base = nameNode.text as string;
 
   let p = fd.parent;
   while (p) {
-    if (p.type === "class_declaration") {
-      const cn = p.childForFieldName?.("name") ?? firstChildOfType(p, "type_identifier") ?? firstChildOfType(p, "simple_identifier");
+    if (spec.classScopeTypes.includes(p.type)) {
+      const cn = p.childForFieldName?.("name") ?? firstChildOfTypes(p, spec.classNameTypes);
       return cn ? `${cn.text}.${base}` : base;
     }
     p = p.parent;
@@ -231,14 +274,14 @@ function functionName(fd: any): string | undefined {
 }
 
 /** The simple name a call targets (last segment of a member access). */
-function calleeName(call: any): string | undefined {
+function calleeName(call: any, spec: LangSpec): string | undefined {
   const c0 = call.namedChild(0);
   if (!c0) return undefined;
-  if (c0.type === "simple_identifier") return c0.text;
-  if (c0.type === "navigation_expression") {
-    const suffix = lastChildOfType(c0, "navigation_suffix");
+  if (spec.nameTypes.includes(c0.type)) return c0.text;
+  if (c0.type === spec.memberType) {
+    const suffix = lastChildOfType(c0, spec.memberSuffixType);
     if (suffix) {
-      const id = firstChildOfType(suffix, "simple_identifier");
+      const id = firstChildOfTypes(suffix, spec.nameTypes);
       return id ? id.text : String(suffix.text).replace(/^\./, "");
     }
   }
@@ -254,11 +297,11 @@ function lastChildOfType(node: any, type: string): any | undefined {
   return found;
 }
 
-/** Walk up to the nearest enclosing recorded function_declaration's node id. */
-function enclosingFunctionId(node: any, fdToId: Map<number, string>): string | undefined {
+/** Walk up to the nearest enclosing recorded function declaration's node id. */
+function enclosingFunctionId(node: any, fdToId: Map<number, string>, spec: LangSpec): string | undefined {
   let p = node.parent;
   while (p) {
-    if (p.type === "function_declaration") {
+    if (p.type === spec.funcType) {
       const id = fdToId.get(p.id);
       if (id) return id;
     }
@@ -274,7 +317,7 @@ function shortName(name: string): string {
 
 // --- file discovery ---
 
-function walk(dir: string, ext: string): string[] {
+function walk(dir: string, exts: string[]): string[] {
   const out: string[] = [];
   let entries: fs.Dirent[];
   try {
@@ -285,8 +328,8 @@ function walk(dir: string, ext: string): string[] {
   for (const e of entries) {
     if (e.isDirectory()) {
       if (IGNORE_DIRS.has(e.name)) continue;
-      out.push(...walk(path.join(dir, e.name), ext));
-    } else if (e.isFile() && e.name.endsWith(ext)) {
+      out.push(...walk(path.join(dir, e.name), exts));
+    } else if (e.isFile() && exts.some((x) => e.name.endsWith(x))) {
       out.push(path.join(dir, e.name));
     }
   }

@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import { linkRepos } from "../core/link.js";
+import { systemDiagram } from "../core/mermaid.js";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
 import {
   readAllTopologies,
@@ -99,6 +100,11 @@ function architectureMd(m: Manifest, tops: ExtractorOutput[], map: MergedMap): s
   for (const n of map.externalNodes) {
     L.push(`- \`${n.id.replace(/^external:/, "")}\` — ${n.consumedBy.length} call site(s)`);
   }
+  L.push("");
+  L.push(`## System diagram`);
+  L.push("```mermaid");
+  L.push(systemDiagram(map));
+  L.push("```");
   L.push("");
   L.push(`## Machine-readable detail`);
   L.push(`- \`map.json\` — merged cross-repo map`);

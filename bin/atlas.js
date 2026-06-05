@@ -22,6 +22,7 @@ const COMMANDS = {
   mcp:      { phase: 3, available: true,  desc: "Run the MCP server that serves the map to agents (stdio)" },
   agent:    { phase: 3, available: true,  desc: "Generate agent steering + architecture.md and print wiring" },
   refresh:  { phase: 3, available: true,  desc: "Re-scan all repos in a workspace, re-link, regenerate agent files" },
+  hook:     { phase: 3, available: true,  desc: "Install/uninstall a git hook that refreshes a workspace on commit" },
 };
 
 // Compiled command modules live under dist/cli/ after `npm run build`.
@@ -34,6 +35,7 @@ const ROUTES = {
   agent:     { mod: "dist/cli/agent.js",     fn: "runAgent" },
   refresh:   { mod: "dist/cli/refresh.js",   fn: "runRefresh" },
   detect:    { mod: "dist/cli/detect-cmd.js", fn: "runDetect" },
+  hook:      { mod: "dist/cli/hook.js",      fn: "runHook" },
 };
 
 async function route(cmd, args) {
