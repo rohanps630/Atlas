@@ -37,6 +37,8 @@ export interface LangSpec {
   funcType: string;          // function declaration node
   callType: string;          // call expression node
   classScopeTypes: string[]; // nodes that introduce a Type scope (for `Type.method`)
+  typeDeclTypes: string[];   // all repo type declarations (incl. object/protocol),
+                             // for the repo-type set used in external classification
   nameTypes: string[];       // identifier node(s) used for names / direct callees
   classNameTypes: string[];  // identifier node(s) for a class/type name
   memberType: string;        // member-access expression (e.g. `a.b`)
@@ -50,6 +52,11 @@ const COMMON = {
   funcType: "function_declaration",
   callType: "call_expression",
   classScopeTypes: ["class_declaration"],
+  // Kotlin `object`/`interface` and Swift `protocol`/`struct`/`enum` also declare
+  // repo types — include them so a receiver typed to one is classified
+  // internal-unresolved, not external (ADR 0016 honesty). Method qualification +
+  // field collection still key off classScopeTypes (the ones with methods/fields).
+  typeDeclTypes: ["class_declaration", "object_declaration", "protocol_declaration"],
   nameTypes: ["simple_identifier"],
   classNameTypes: ["type_identifier", "simple_identifier"],
   memberType: "navigation_expression",
@@ -115,7 +122,7 @@ export function extractNative(opts: NativeExtractOptions, stats?: ResolutionStat
     const tree = parseFile(parser, src, rel);
     if (!tree) continue; // unparseable file — skip, don't fail the whole scan
 
-    for (const cls of descendants(tree.rootNode, spec.classScopeTypes)) {
+    for (const cls of descendants(tree.rootNode, spec.typeDeclTypes)) {
       const cn = className(cls, spec);
       if (cn) classNames.add(cn);
     }
