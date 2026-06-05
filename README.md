@@ -154,9 +154,10 @@ With a single workspace, `-w` is optional; with a single repo in it, `--repo` is
 | `atlas detect <path>` | Infer a repo's languages, frameworks, and role (no scan) |
 | `atlas scan <path>` | Extract a repo into a workspace, then re-link |
 | `atlas context <symbol\|file>` | Target + its callers and callees |
-| `atlas impact <symbol\|file>` | Transitive callers + cross-repo consumers (`--depth`/`--limit`) |
+| `atlas impact <symbol\|file>` | Transitive callers + cross-repo consumers (`--depth`/`--limit`); `--diff` for a git change's blast radius |
 | `atlas path <A> <B>` | Shortest connection between two symbols (cross-repo) |
 | `atlas endpoints` | Cross-repo links + external (unmatched) endpoints |
+| `atlas viz` | Interactive, self-contained HTML map of the workspace graph |
 | `atlas agent` | Generate steering + `architecture.md`; print wiring |
 | `atlas refresh` | Re-scan a whole workspace, re-link, regenerate agent docs |
 | `atlas mcp` | Run the MCP server (stdio) for agents |

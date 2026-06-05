@@ -11,6 +11,26 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Diff-driven impact + interactive HTML map (ADR 0017, 0018)
+
+Two on-thesis features salvaged from the predecessor system (see `docs/backlog.md`), both pure
+front-ends over data Atlas already has — no schema change, core untouched (ADR 0005).
+
+- **`atlas impact --diff [--base <ref>] [--repo <id>]`** (ADR 0017): the blast radius of a whole
+  change. Reads `git diff <base>` (default `HEAD`), maps changed line ranges to the functions that
+  own them (`[fn start, next fn start)`), and runs the existing transitive-caller + cross-repo
+  impact over all of them. Dogfooded on HMS: a router/middleware change in the Go backend traced
+  straight to the **Kotlin mobile app's Retrofit endpoints** it affects. Git is invoked read-only;
+  no network (ADR 0006). The pure diff→nodes mapper is unit-tested without git.
+- **`atlas viz [--repo <id>] [--out <file>]`** (ADR 0018): a self-contained, interactive HTML
+  force-graph of the workspace (connected nodes coloured by repo, cross-repo HTTP edges
+  highlighted; pan/zoom/hover/search). Deterministic seeded layout (`core/viz.ts`), no CDN/network
+  — opens offline, NDA-safe. Writes `~/.atlas/<ws>/graph.html`. A richer companion to the static
+  Mermaid diagram. Dogfooded on HMS (1622 nodes / 3192 edges); the model + layout are unit-tested.
+- New `docs/backlog.md` records the remaining salvaged-but-not-yet-earned ideas (data-layer/
+  shared-table topology, message-broker contracts) and the standing decision that the LLM stays an
+  optional *consumer* of the map (the agent over MCP), never in the analysis pipeline.
+
 ## [Unreleased] — Native (Kotlin/Swift) receiver typing (ADR 0016)
 
 - No schema change; core untouched (ADR 0005). Native extractor (Swift + Kotlin).
