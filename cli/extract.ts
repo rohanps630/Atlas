@@ -11,22 +11,27 @@
 import { extractRepo } from "../extractors/typescript/index.js";
 import { extractNative, nativeLanguages } from "../extractors/native/index.js";
 import { extractGo } from "../extractors/go/index.js";
+import { newStats, toCallResolution, type CallResolution } from "../extractors/shared/resolve.js";
 import type { ExtractorOutput } from "../core/schema.js";
 
 export interface RepoExtraction {
   output: ExtractorOutput;
   /** Per-language function counts, for reporting (only languages that matched). */
   perLanguage: { language: string; functions: number }[];
+  /** Call-resolution coverage for the repo, summed across its languages (ADR 0013). */
+  resolution: CallResolution;
 }
 
 export function extractRepoAll(repoPath: string, repoId: string): RepoExtraction {
-  const ts = extractRepo({ repoPath, repoId });
+  // One stats accumulator shared across the repo's languages → a per-repo total.
+  const stats = newStats();
+  const ts = extractRepo({ repoPath, repoId }, stats);
   const outputs: ExtractorOutput[] = [ts];
   const perLanguage = [{ language: "typescript", functions: fnCount(ts) }];
 
   // Every registered tree-sitter language (Swift, Kotlin, …) runs automatically.
   for (const language of nativeLanguages()) {
-    const out = extractNative({ repoPath, repoId, language });
+    const out = extractNative({ repoPath, repoId, language }, stats);
     const functions = fnCount(out);
     if (functions > 0) {
       outputs.push(out);
@@ -34,14 +39,14 @@ export function extractRepoAll(repoPath: string, repoId: string): RepoExtraction
     }
   }
 
-  const go = extractGo({ repoPath, repoId });
+  const go = extractGo({ repoPath, repoId }, stats);
   const goFns = fnCount(go);
   if (goFns > 0) {
     outputs.push(go);
     perLanguage.push({ language: "go", functions: goFns });
   }
 
-  return { output: merge(outputs), perLanguage };
+  return { output: merge(outputs), perLanguage, resolution: toCallResolution(stats) };
 }
 
 function merge(outputs: ExtractorOutput[]): ExtractorOutput {

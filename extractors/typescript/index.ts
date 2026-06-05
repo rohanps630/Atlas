@@ -20,6 +20,8 @@ import {
   SyntaxKind,
   type SourceFile,
   type CallExpression,
+  type ClassDeclaration,
+  type Decorator,
 } from "ts-morph";
 import {
   SCHEMA_VERSION,
@@ -29,6 +31,7 @@ import {
   type ExposedEndpoint,
   type ExtractorOutput,
 } from "../../core/schema.js";
+import { newStats, type ResolutionStats } from "../shared/resolve.js";
 
 export interface ExtractOptions {
   /** Absolute path to the repo root. */
@@ -37,8 +40,9 @@ export interface ExtractOptions {
   repoId: string;
 }
 
-export function extractRepo(opts: ExtractOptions): ExtractorOutput {
+export function extractRepo(opts: ExtractOptions, stats?: ResolutionStats): ExtractorOutput {
   const repoRoot = path.resolve(opts.repoPath);
+  const st = stats ?? newStats();
   const project = loadProject(repoRoot);
 
   const sourceFiles = project
@@ -81,9 +85,13 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
   }
 
   // Pass 2: edges + endpoints. Imports (module -> module), calls (fn -> fn),
-  // HTTP client calls (consumes), and route registrations (exposes).
+  // HTTP client calls (consumes), and route registrations (exposes). Express
+  // routes are collected with their router identity, then joined to mount
+  // prefixes after the file walk (ADR 0014); Nest routes come from decorators.
   const consumes: ConsumedEndpoint[] = [];
   const exposes: ExposedEndpoint[] = [];
+  const routeRegs: RouteReg[] = [];
+  const mounts: Mount[] = [];
   for (const sf of sourceFiles) {
     const fromModule = fileToModuleId.get(sf.getFilePath())!;
 
@@ -104,22 +112,43 @@ export function extractRepo(opts: ExtractOptions): ExtractorOutput {
       const fromId = enclosingId(call, declToId) ?? fromModule;
 
       const toId = resolveCallTarget(call, declToId);
+      // Call-resolution coverage (ADR 0013): ts-morph is type-aware, so an
+      // unresolved call that still declares inside the repo is internal-unmapped;
+      // anything resolving to node_modules / lib types is an expected external.
+      st.total++;
       if (toId && toId !== fromId) {
+        st.resolved++;
         edges.push({
           from: fromId,
           to: toId,
           kind: "call",
           line: call.getStartLineNumber(),
         });
+      } else if (toId === fromId) {
+        st.skippedSelf++;
+      } else if (targetsInRepo(call, repoRoot)) {
+        st.skippedAmbiguous++; // internal-unresolved (mirrors the Go/native bucket)
+      } else {
+        st.unresolved++; // external / library / runtime
       }
 
       const consume = detectConsume(call, fromId);
       if (consume) consumes.push(consume);
 
-      const expose = detectExpose(call, fromId, declToId);
-      if (expose) exposes.push(expose);
+      const reg = expressRoute(call, fromId, declToId);
+      if (reg) routeRegs.push(reg);
+      else {
+        const mount = expressMount(call, declToId);
+        if (mount) mounts.push(mount);
+      }
     }
+
+    // NestJS controllers — routing lives in decorators, not call expressions.
+    for (const cls of sf.getClasses()) collectNestExposes(cls, declToId, fromModule, exposes);
   }
+
+  // Join each Express route to its router's mount-prefix chain (ADR 0014).
+  exposes.push(...buildExpressExposes(routeRegs, mounts));
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -218,20 +247,37 @@ function fetchMethod(opts: Node | undefined): string | undefined {
   return undefined;
 }
 
+// --- Express / Nest exposes (ADR 0014) ---
+
+const NEST_VERBS = new Set(["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]);
+
+/** A route registration on a router object, before mount prefixes are applied. */
+interface RouteReg {
+  routerDecl: Node | undefined; // the resolved declaration of the router/app object
+  method: string;
+  path: string;
+  handler: string;
+  line: number;
+}
+
+/** A `parent.use(prefix, child)` mount: `child`'s routes get `prefix` prepended. */
+interface Mount {
+  childDecl: Node;
+  prefix: string;
+  parentDecl: Node | undefined;
+}
+
 /**
- * Detect a route registration and record it as an exposed endpoint.
- *
- * Handles the Express family: `app.get("/path", handler)`,
- * `router.post("/path", mw, handler)`. Requires a server/router-like object, a
- * string-literal path, and a handler argument. The handler resolves to an
- * in-repo function node when it's a named reference, else to the enclosing
- * function/module where the route is registered.
+ * Detect an Express route registration `R.<verb>("/path", …handlers)`. Returns
+ * the route keyed by R's resolved declaration so it can later be joined to any
+ * `app.use(prefix, R)` mount — even one in another file (ADR 0014). Requires a
+ * server/router-like object, a string-literal path, and a handler argument.
  */
-function detectExpose(
+function expressRoute(
   call: CallExpression,
   fromId: string,
   declToId: Map<Node, string>,
-): ExposedEndpoint | undefined {
+): RouteReg | undefined {
   const callee = call.getExpression();
   if (!Node.isPropertyAccessExpression(callee)) return undefined;
 
@@ -247,23 +293,141 @@ function detectExpose(
   const path = first.getLiteralValue();
   if (!path.startsWith("/")) return undefined;
 
-  // The handler is the last function/identifier argument (after path + middleware).
-  let handler = fromId;
+  return {
+    routerDecl: resolveObjectDecl(callee.getExpression()),
+    method: verb.toUpperCase(),
+    path,
+    handler: resolveHandlerArg(args, fromId, declToId),
+    line: call.getStartLineNumber(),
+  };
+}
+
+/** Detect a `parent.use("/prefix", childRouter)` mount. */
+function expressMount(call: CallExpression, _declToId: Map<Node, string>): Mount | undefined {
+  const callee = call.getExpression();
+  if (!Node.isPropertyAccessExpression(callee) || callee.getName() !== "use") return undefined;
+  if (!SERVER_RE.test(callee.getExpression().getText())) return undefined;
+
+  const args = call.getArguments();
+  const first = args[0];
+  if (!first || !Node.isStringLiteral(first)) return undefined; // need a literal prefix
+  const prefix = first.getLiteralValue();
+  if (!prefix.startsWith("/")) return undefined;
+
+  // The mounted router is the last identifier arg that resolves to a declaration.
+  let childDecl: Node | undefined;
+  for (let i = args.length - 1; i >= 1; i--) {
+    const a = args[i]!;
+    if (Node.isIdentifier(a)) {
+      childDecl = resolveObjectDecl(a);
+      if (childDecl) break;
+    }
+  }
+  if (!childDecl) return undefined;
+
+  return { childDecl, prefix, parentDecl: resolveObjectDecl(callee.getExpression()) };
+}
+
+/** Resolve every collected route to its full path(s) by walking mount chains. */
+function buildExpressExposes(routes: RouteReg[], mounts: Mount[]): ExposedEndpoint[] {
+  const mountsByChild = new Map<Node, Mount[]>();
+  for (const m of mounts) {
+    const list = mountsByChild.get(m.childDecl);
+    if (list) list.push(m);
+    else mountsByChild.set(m.childDecl, [m]);
+  }
+
+  // Prefix(es) a router is reachable under — "" when it is never mounted.
+  const prefixesFor = (decl: Node | undefined, seen: Set<Node>, depth: number): string[] => {
+    if (!decl || depth > 6) return [""];
+    const ms = mountsByChild.get(decl);
+    if (!ms || ms.length === 0 || seen.has(decl)) return [""];
+    seen.add(decl);
+    const out: string[] = [];
+    for (const m of ms) {
+      for (const parent of prefixesFor(m.parentDecl, seen, depth + 1)) out.push(joinPath(parent, m.prefix));
+    }
+    seen.delete(decl);
+    return out.length ? out : [""];
+  };
+
+  const out: ExposedEndpoint[] = [];
+  for (const r of routes) {
+    const seenPaths = new Set<string>();
+    for (const pre of prefixesFor(r.routerDecl, new Set(), 0)) {
+      const full = joinPath(pre, r.path);
+      if (seenPaths.has(full)) continue;
+      seenPaths.add(full);
+      out.push({ method: r.method, path: full, handler: r.handler, line: r.line });
+    }
+  }
+  return out;
+}
+
+/**
+ * NestJS: a `@Controller(base?)` class whose methods carry `@Get/@Post/...(sub?)`
+ * decorators expose `VERB /base/sub`, handler = the method's node (ADR 0014).
+ */
+function collectNestExposes(
+  cls: ClassDeclaration,
+  declToId: Map<Node, string>,
+  fromModule: string,
+  out: ExposedEndpoint[],
+): void {
+  const controller = cls.getDecorator("Controller");
+  if (!controller) return;
+  const base = decoratorStringArg(controller) ?? "";
+
+  for (const m of cls.getMethods()) {
+    for (const dec of m.getDecorators()) {
+      const verb = dec.getName().toUpperCase();
+      if (!NEST_VERBS.has(verb)) continue;
+      const sub = decoratorStringArg(dec) ?? "";
+      out.push({
+        method: verb,
+        path: joinPath(base, sub),
+        handler: declToId.get(m) ?? fromModule,
+        line: m.getStartLineNumber(),
+      });
+    }
+  }
+}
+
+/** First string-literal argument of a decorator (`@Get(":id")` → ":id"), else undefined. */
+function decoratorStringArg(dec: Decorator): string | undefined {
+  const arg = dec.getArguments()[0];
+  return arg && Node.isStringLiteral(arg) ? arg.getLiteralValue() : undefined;
+}
+
+/** Join path segments into a single leading-slash route ("/a" + "/b" → "/a/b"). */
+function joinPath(a: string, b: string): string {
+  const parts = `${a}/${b}`.split("/").filter(Boolean);
+  return "/" + parts.join("/");
+}
+
+/** The declaration node a router/app object identifier resolves to (ADR 0014). */
+function resolveObjectDecl(expr: Node): Node | undefined {
+  try {
+    let symbol = expr.getSymbol();
+    if (symbol) symbol = symbol.getAliasedSymbol() ?? symbol;
+    return symbol?.getDeclarations()[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/** The handler arg of a route: the last identifier that resolves in-repo, else fromId. */
+function resolveHandlerArg(args: Node[], fromId: string, declToId: Map<Node, string>): string {
   for (let i = args.length - 1; i >= 1; i--) {
     const a = args[i]!;
     if (Node.isIdentifier(a)) {
       const resolved = resolveIdentifierTarget(a, declToId);
-      if (resolved) {
-        handler = resolved;
-        break;
-      }
+      if (resolved) return resolved;
     } else if (Node.isArrowFunction(a) || Node.isFunctionExpression(a)) {
-      // inline handler — attribute to where the route is registered (fromId)
-      break;
+      break; // inline handler — attribute to the registering scope
     }
   }
-
-  return { method: verb.toUpperCase(), path, handler, line: call.getStartLineNumber() };
+  return fromId;
 }
 
 /** Resolve an identifier (e.g. a handler reference) to an in-repo node id. */
@@ -392,6 +556,29 @@ function resolveCallTarget(
     }
   }
   return undefined;
+}
+
+/**
+ * Does an unresolved call's callee declare inside the repo (not node_modules)?
+ * True → it targets in-repo code we didn't map to a node (internal-unresolved);
+ * false → a library/runtime call (external). Used only for coverage (ADR 0013).
+ */
+function targetsInRepo(call: CallExpression, repoRoot: string): boolean {
+  let symbol;
+  try {
+    symbol = call.getExpression().getSymbol();
+    if (symbol) symbol = symbol.getAliasedSymbol() ?? symbol;
+  } catch {
+    return false;
+  }
+  if (!symbol) return false;
+  const root = toPosix(repoRoot);
+  for (const decl of symbol.getDeclarations()) {
+    const fp = toPosix(decl.getSourceFile().getFilePath());
+    if (fp.includes("/node_modules/")) continue;
+    if (fp.startsWith(root)) return true;
+  }
+  return false;
 }
 
 function isInRepo(filePath: string, repoRoot: string): boolean {

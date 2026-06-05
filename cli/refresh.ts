@@ -17,8 +17,10 @@ import {
   readManifest,
   writeDetection,
   writeMap,
+  writeResolution,
   writeTopology,
 } from "./store.js";
+import { coveragePct } from "../extractors/shared/resolve.js";
 import { writeAgentFiles } from "./agent.js";
 import { resolveWorkspace } from "./workspace.js";
 
@@ -40,13 +42,15 @@ export function runRefresh(args: string[]): number {
       continue;
     }
     writeDetection(ws, r.id, detectStack(r.path));
-    const { output: out, perLanguage } = extractRepoAll(r.path, r.id);
+    const { output: out, perLanguage, resolution } = extractRepoAll(r.path, r.id);
     writeTopology(ws, out);
+    writeResolution(ws, r.id, resolution);
     scanned++;
     const langs = perLanguage.map((l) => `${l.language} ${l.functions}`).join(", ");
     console.error(
       `  scanned ${r.id}: ${out.nodes.filter((n) => n.kind === "function").length} functions (${langs}), ` +
-        `${out.endpoints.consumes.length} consumes, ${out.endpoints.exposes.length} exposes`,
+        `${out.endpoints.consumes.length} consumes, ${out.endpoints.exposes.length} exposes` +
+        ` · ${coveragePct(resolution)} calls resolved`,
     );
   }
 
