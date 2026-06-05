@@ -16,6 +16,7 @@ derive. Full rationale: `README.md`, then `docs/`.
 4. `docs/schema.md` — the data contract. **Treat it as a public API.**
 5. `docs/adr/` — why each decision was made.
 6. `docs/rejected.md` — what is deliberately out of scope.
+   `docs/backlog.md` — salvaged-but-not-yet-earned ideas (build only when a real need appears).
 7. `docs/how-it-works.md` — the end-to-end pipeline; `docs/cli.md` — the command reference.
 
 ## Rules you must follow
