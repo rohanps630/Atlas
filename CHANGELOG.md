@@ -11,6 +11,16 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Status dashboard + reference docs
+
+- `atlas status [<workspace>]` is now a dashboard (`cli/status.ts`): version/schema/store,
+  every workspace with its repos, per-repo counts + language breakdown + freshness, cross-repo
+  link / external totals, and whether agent docs are generated. (Replaces the old static stub;
+  it now routes to the compiled command.)
+- Heavy documentation of the durable surface (philosophy #9): `docs/cli.md` (full command
+  reference, flags, exit codes, flows) and `docs/how-it-works.md` (end-to-end pipeline). Linked
+  from README and AGENTS. No schema change.
+
 ## [Unreleased] — Conventions / golden-files surface
 
 Adapted from codebase-context (the one genuinely new idea across the tool-comparison

@@ -41,7 +41,12 @@ node bin/atlas.js context src/orders/api.ts -w myapp   # or a file → its funct
 node bin/atlas.js impact createOrder -w myapp     # what breaks: callers (intra) + consumers (cross-repo)
 node bin/atlas.js path createOrder save -w myapp  # shortest connection between two symbols (cross-repo)
 node bin/atlas.js endpoints -w myapp              # cross-repo links + external endpoints
+
+node bin/atlas.js status                          # dashboard: workspaces, repos, counts, freshness
 ```
+
+Full command reference: [`docs/cli.md`](docs/cli.md). How it all fits together:
+[`docs/how-it-works.md`](docs/how-it-works.md).
 
 `scan` reads each repo (never modifies it) and writes only to `~/.atlas/<workspace>/`
 (override the store root with `ATLAS_HOME`). It auto-detects languages: TypeScript/JS plus
@@ -73,6 +78,8 @@ node bin/atlas.js refresh -w myapp   # re-scan all repos in the workspace, re-li
 4. [`docs/schema.md`](docs/schema.md) — the keystone data contract (treat as a public API).
 5. [`docs/adr/`](docs/adr/) — why each major decision was made.
 6. [`docs/rejected.md`](docs/rejected.md) — what was deliberately *not* built, and why.
+7. [`docs/how-it-works.md`](docs/how-it-works.md) — the end-to-end pipeline overview.
+8. [`docs/cli.md`](docs/cli.md) — the full command reference.
 
 ## Continuing development with an agent
 

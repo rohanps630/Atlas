@@ -13,7 +13,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // Command registry. `available: false` commands are declared so the roadmap is visible
 // from the CLI itself, but they are not implemented yet.
 const COMMANDS = {
-  status:   { phase: 0, available: true,  desc: "Show tool version, phase, and data-store location" },
+  status:   { phase: 0, available: true,  desc: "Dashboard: workspaces, repos, counts, freshness, wiring" },
   detect:   { phase: 4, available: true,  desc: "Detect a repo's languages, frameworks, and role" },
   scan:     { phase: 1, available: true,  desc: "Scan a repo (auto-detects stack) and write its topology" },
   context:  { phase: 1, available: true,  desc: "Emit a focused context pack (target + callers + callees)" },
@@ -38,6 +38,7 @@ const ROUTES = {
   refresh:   { mod: "dist/cli/refresh.js",   fn: "runRefresh" },
   detect:    { mod: "dist/cli/detect-cmd.js", fn: "runDetect" },
   hook:      { mod: "dist/cli/hook.js",      fn: "runHook" },
+  status:    { mod: "dist/cli/status.js",    fn: "runStatus" },
 };
 
 async function route(cmd, args) {
@@ -52,9 +53,6 @@ async function route(cmd, args) {
   process.exit(code ?? 0);
 }
 
-const DATA_STORE = process.env.ATLAS_HOME
-  || `${process.env.HOME || "~"}/.atlas`;
-
 function printHelp() {
   console.log(`atlas ${VERSION}
 The agent brings the search; this tool brings the map.
@@ -68,14 +66,6 @@ Commands:`);
   }
   console.log(`
 Docs: start with README.md, then AGENTS.md if you're an agent continuing development.`);
-}
-
-function printStatus() {
-  console.log(`atlas ${VERSION}`);
-  console.log(`data store:   ${DATA_STORE}`);
-  console.log(`current phase: 1 — single-repo core ('scan' + 'context')`);
-  console.log(`next phase:    2 — manifest, cross-repo links, 'impact'`);
-  console.log(`see docs/phases.md for the roadmap.`);
 }
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -94,10 +84,6 @@ if (!entry) {
   console.error(`Unknown command: ${cmd}\n`);
   printHelp();
   process.exit(1);
-}
-if (cmd === "status") {
-  printStatus();
-  process.exit(0);
 }
 if (!entry.available) {
   console.error(`'${cmd}' is planned for Phase ${entry.phase} and isn't implemented yet.`);
