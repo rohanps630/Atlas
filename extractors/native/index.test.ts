@@ -31,6 +31,24 @@ for (const language of ["swift", "kotlin"] as const) {
   });
 }
 
+for (const language of ["swift", "kotlin"] as const) {
+  test(`${language} receiver typing from params and class fields (ADR 0016)`, () => {
+    const out = extractNative({ repoPath: fixture, repoId: "nm", language });
+    const byName = (n: string) => out.nodes.find((x) => x.name === n)!;
+    const hasCall = (from: string, to: string) =>
+      out.edges.some((e) => e.kind === "call" && e.from === byName(from).id && e.to === byName(to).id);
+
+    // field-typed receiver: `greeter` is a Greeter field → greeter.build() resolves.
+    assert.ok(hasCall("Handler.run", "Greeter.build"), "expected field-typed Handler.run → Greeter.build");
+    // param-typed receiver: `other: Other` → other.build() resolves to Other.build.
+    assert.ok(hasCall("Handler.run", "Other.build"), "expected param-typed Handler.run → Other.build");
+
+    // external classification: `ctx: Context` isn't a repo class, so ctx.zonk()
+    // must NOT link to the (globally-unique) Greeter.zonk — a removed wrong edge.
+    assert.ok(!hasCall("Handler.run", "Greeter.zonk"), "external-typed receiver must not resolve");
+  });
+}
+
 test("kotlin Retrofit consumes resolve const route templates", () => {
   const out = extractNative({ repoPath: fixture, repoId: "nm", language: "kotlin" });
   const c = out.endpoints.consumes.find((e) => e.path === "/api/v1/auth/register");

@@ -11,6 +11,27 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Native (Kotlin/Swift) receiver typing (ADR 0016)
+
+- No schema change; core untouched (ADR 0005). Native extractor (Swift + Kotlin).
+- Extends receiver typing (ADR 0012) with two sources the native extractor previously ignored:
+  **function-parameter types** (`fun f(x: T)` / `func f(x: T)` → `x : T`) and **class
+  field/property types** (stored properties + Kotlin constructor `val/var` params → a per-class
+  field→type map, looked up when a receiver identifier isn't a local binding). Both resolve
+  `x.method()` to the precise `Type.method`.
+- **External-receiver classification** (mirror ADR 0015): a receiver typed to a non-repo class
+  (`String`, `Context`, …) is counted `external` and not run through the global short-name
+  fallback — also removing wrong edges (a `ctx.foo()` linking to a coincidentally-unique repo
+  method). The grammars share the relevant node names, so the logic is one path for both langs.
+- **Measured (big Kotlin win):** hms-mobile (Kotlin) **59% → 85%** coverage, call edges
+  **1601 → 2277 (+676)** — `impact`/`path` on the Android app are far more complete. Swift, on
+  the only Swift in a workspace (`ghost_daddy`, a small RN native-module surface), showed **no
+  change (68% → 68%)**: it has no ambiguous calls resolvable via params/fields. So the Swift path
+  is added and fixture-tested but unexercised by real code here — the real validation is Kotlin.
+- 21 HMS cross-repo links / 3 externals unchanged (the new edges are intra-repo); tests 60/60;
+  new native-mini cases for field-typed and param-typed receivers plus a removed-wrong-edge
+  (external receiver) assertion, for both Swift and Kotlin.
+
 ## [Unreleased] — Deeper Go receiver typing + external classification (ADR 0015)
 
 - No schema change; core untouched (ADR 0005). Go extractor only.

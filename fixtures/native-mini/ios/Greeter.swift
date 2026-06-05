@@ -11,6 +11,8 @@ class Greeter {
     func build() -> String {
         return "hi"
     }
+
+    func zonk() {} // globally-unique method name (used by the external-receiver test)
 }
 
 // A second `build` makes the short name ambiguous repo-wide; the layers above
@@ -18,5 +20,20 @@ class Greeter {
 class Other {
     func build() -> String {
         return "other"
+    }
+}
+
+// Receiver typing from a stored property and a function parameter (ADR 0016).
+class Handler {
+    let greeter: Greeter
+
+    init(greeter: Greeter) {
+        self.greeter = greeter
+    }
+
+    func run(other: Other, ctx: Context) {
+        greeter.build() // field-typed receiver → Greeter.build
+        other.build()   // param-typed receiver → Other.build
+        ctx.zonk()       // ctx: Context (not a repo class) → external, no edge
     }
 }
