@@ -11,6 +11,8 @@ class Greeter {
     fun build(): String {
         return "hi"
     }
+
+    fun zonk() {} // globally-unique method name (used by the external-receiver test)
 }
 
 // A second `build` makes the short name ambiguous repo-wide; the layers above
@@ -18,5 +20,14 @@ class Greeter {
 class Other {
     fun build(): String {
         return "other"
+    }
+}
+
+// Receiver typing from a class field and a function parameter (ADR 0016).
+class Handler(private val greeter: Greeter) {
+    fun run(other: Other, ctx: Context) {
+        greeter.build() // field-typed receiver → Greeter.build
+        other.build()   // param-typed receiver → Other.build
+        ctx.zonk()       // ctx: Context (not a repo class) → external, no edge
     }
 }

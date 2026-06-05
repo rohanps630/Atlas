@@ -21,6 +21,7 @@ not silently change course — write a new ADR that **supersedes** the old one a
 | [0013](0013-call-resolution-coverage-signal.md) | Call-resolution coverage signal (descriptive, not a score) | Accepted |
 | [0014](0014-express-nest-exposes.md) | Express mount-prefix + NestJS exposes extraction | Accepted |
 | [0015](0015-go-receiver-typing-external-classification.md) | Deeper Go receiver typing + external-receiver coverage classification | Accepted |
+| [0016](0016-native-receiver-typing.md) | Native (Kotlin/Swift) receiver typing: params, fields, external classification | Accepted |
 
 ## Format
 
