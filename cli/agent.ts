@@ -217,15 +217,17 @@ function wiringInstructions(ws: string, steerPath: string): string {
   return `
 To make a coding agent auto-aware of Atlas:
 
-  • Claude Code — add this line to the target repo's CLAUDE.md (imports the steering file):
-        @${steer}
+  • Claude Code (shareable + portable):
+      - Committed: a short Atlas note in the repo's CLAUDE.md — NO machine path, so teammates
+        who clone it and have atlas set up benefit. (This is what to commit.)
+      - Personal (gitignored): add this import to your CLAUDE.local.md for the full steering:
+            @${steer}
+        Each developer runs \`atlas agent\` and adds their own line — paths differ per machine.
 
-  • Register the MCP server (structured tools) for Claude Code:
-        claude mcp add atlas -- node ${bin} mcp
-    …or add to .mcp.json:
-        { "mcpServers": { "atlas": { "command": "node", "args": ["${bin}", "mcp"] } } }
+  • Register the MCP server (per machine):
+        claude mcp add atlas -s user -- node ${bin} mcp
 
-  • Cursor: paste ${steer} into .cursor/rules. Kiro: add it as a steering file.
+  • Cursor: paste the contents of ${steer} into .cursor/rules. Kiro: add it as a steering file.
 
 Re-run \`atlas agent -w ${ws}\` after re-scanning to refresh architecture.md.`;
 }
