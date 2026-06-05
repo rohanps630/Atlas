@@ -11,6 +11,28 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Deeper Go receiver typing + external classification (ADR 0015)
+
+- No schema change; core untouched (ADR 0005). Go extractor only.
+- Extends the per-function type environment (ADR 0012) with package-level `var` types,
+  function/method **result-type** inference (`x := f()` / `x := r.m()`), and two-variable
+  **`range` element** types — so more receivers resolve to a precise `Type.method`.
+- **External-receiver classification**: a call whose receiver resolves to a type *not* declared
+  in the repo (`sql.DB`, `gin.Context`, …) is now counted `external` instead of
+  `internalUnresolved`, and is not run through the global short-name fallback — which also
+  removes *wrong* edges that fallback could emit (a call on `*sql.DB` linking to a coincidentally
+  unique repo method). Refines ADR 0013's internal-vs-external split toward its stated meaning.
+- **Honest measured result (modest):** HMS Go coverage hms-backend 51%→**53%**, hms-telephony
+  85%→**86%**; hms-telephony call edges 394→389 (all dropped ones were false). The bigger lift
+  first hypothesised did not materialise — the dominant unresolved receivers are closure params,
+  repo-*interface* dispatch, and type-switch bindings, which are genuinely unresolvable
+  syntactically (interface dispatch must not be guessed). So 53% is near the honest ceiling here.
+- Folding closure parameters into the env was tried and **reverted** (made it worse: 53%→52%,
+  −15 edges, since closure params are usually external types). Recorded in ADR 0015.
+- Native (Kotlin/Swift) deliberately unchanged — categorise its unresolved calls first (earn-it).
+- 21 HMS cross-repo links / 3 externals unchanged; tests 58/58; new go-mini fixtures for
+  return-type, range-element, and external-pkg-var cases.
+
 ## [Unreleased] — Express mount-prefix + NestJS exposes (ADR 0014)
 
 - No schema change: additive `exposes` only; the linker and core are untouched (ADR 0005).
