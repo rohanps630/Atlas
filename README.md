@@ -266,4 +266,4 @@ tested lightly because they churn. If you (or an AI agent) are continuing develo
 
 ## License
 
-UNLICENSED — a personal tool. (Add a license here if you intend others to reuse the code.)
+[MIT](LICENSE) © 2026 Rohan P Suresh — use, modify, and share freely; keep the copyright notice.

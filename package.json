@@ -12,6 +12,11 @@
     "test": "tsx --test core/*.test.ts extractors/typescript/*.test.ts extractors/native/*.test.ts extractors/go/*.test.ts cli/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "author": "Rohan P Suresh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rohanps630/Atlas.git"
+  },
   "engines": {
     "node": ">=18"
   },
@@ -28,6 +33,6 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true
 }
