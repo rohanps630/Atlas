@@ -11,6 +11,14 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Cross-platform (macOS / Linux / Windows)
+
+- Confirmed/hardened cross-OS support: the git auto-refresh hook and the printed wiring lines
+  now forward-slash absolute paths, so they're valid under Git Bash and copy-paste-correct on
+  Windows (no-op on macOS/Linux). Core already used the `path` module + posix-normalized node ids.
+- `docs/setup.md` rewritten with per-OS prerequisites (macOS Xcode CLT, Linux build-essential,
+  Windows VS Build Tools + Python + Git Bash) and platform notes.
+
 ## [Unreleased] — Interactive menu
 
 - `atlas menu` (`cli/menu.ts`): a numbered, interactive menu over the common actions; prompts

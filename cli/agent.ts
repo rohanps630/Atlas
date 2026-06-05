@@ -211,18 +211,21 @@ ${stack.length ? `\nDetected stack (auto): ${stack.join("; ")}.\n` : ""}
 }
 
 function wiringInstructions(ws: string, steerPath: string): string {
+  // Forward-slash paths so the printed lines are copy-paste-correct on Windows too.
+  const steer = steerPath.replace(/\\/g, "/");
+  const bin = ATLAS_BIN.replace(/\\/g, "/");
   return `
 To make a coding agent auto-aware of Atlas:
 
   • Claude Code — add this line to the target repo's CLAUDE.md (imports the steering file):
-        @${steerPath}
+        @${steer}
 
   • Register the MCP server (structured tools) for Claude Code:
-        claude mcp add atlas -- node ${ATLAS_BIN} mcp
+        claude mcp add atlas -- node ${bin} mcp
     …or add to .mcp.json:
-        { "mcpServers": { "atlas": { "command": "node", "args": ["${ATLAS_BIN}", "mcp"] } } }
+        { "mcpServers": { "atlas": { "command": "node", "args": ["${bin}", "mcp"] } } }
 
-  • Cursor: paste ${steerPath} into .cursor/rules. Kiro: add it as a steering file.
+  • Cursor: paste ${steer} into .cursor/rules. Kiro: add it as a steering file.
 
 Re-run \`atlas agent -w ${ws}\` after re-scanning to refresh architecture.md.`;
 }
