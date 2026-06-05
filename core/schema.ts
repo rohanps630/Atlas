@@ -22,8 +22,11 @@ export type NodeKind =
   | "endpoint"
   | "external";
 
-/** docs/schema.md §2 — Edge `kind`. */
-export type EdgeKind = "call" | "import" | "inherit" | "expose" | "consume";
+/**
+ * docs/schema.md §2 — Edge `kind`. `http` is the cross-repo contract edge used
+ * in the unified/merged graph (schema.md §3); extractor outputs never emit it.
+ */
+export type EdgeKind = "call" | "import" | "inherit" | "expose" | "consume" | "http";
 
 /**
  * A node in a repo's graph.

@@ -19,6 +19,7 @@ import {
   queryContext,
   queryEndpoints,
   queryImpact,
+  queryPath,
 } from "../cli/query.js";
 
 const wsProp = {
@@ -73,6 +74,21 @@ const TOOLS = [
       "The workspace HTTP surface: resolved cross-repo links (FE consume ↔ BE expose) and external endpoints (consumed but not exposed by any repo here). Use for cross-repo / backend-dependency questions.",
     inputSchema: { type: "object", properties: { ...wsProp } },
   },
+  {
+    name: "atlas_path",
+    description:
+      "Shortest connection between two symbols/files across the whole workspace — spanning call edges and cross-repo HTTP contracts. Use to answer 'how does A reach B?' in one query instead of reading files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "Start symbol, file, or node id." },
+        to: { type: "string", description: "End symbol, file, or node id." },
+        ...wsProp,
+        maxHops: { type: "number", description: "Max path length (default 12)." },
+      },
+      required: ["from", "to"],
+    },
+  },
 ] as const;
 
 function ok(data: unknown) {
@@ -102,6 +118,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return ok(queryImpact(args.target!, args.workspace, args.repo));
       case "atlas_endpoints":
         return ok(queryEndpoints(args.workspace));
+      case "atlas_path":
+        return ok(queryPath(args.from!, args.to!, args.workspace, args.maxHops ? Number(args.maxHops) : undefined));
       default:
         return fail(`Unknown tool: ${name}`);
     }
