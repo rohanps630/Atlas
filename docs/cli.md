@@ -69,12 +69,18 @@ returned (prints "+N more"). Exit `2` if unresolved.
 them, and runs impact over all of them. The repo is `--repo`, else the workspace repo containing
 the current dir. Prints nothing affected (exit `0`) when the diff touches no mapped functions.
 
-### `atlas viz [--workspace <ws>] [--repo <id>] [--out <file>]`
-Render an **interactive, self-contained HTML** map of the workspace graph (ADR 0018): connected
-nodes (isolated ones dropped) coloured by repo, sized by degree, with cross-repo HTTP edges
-highlighted; pan/zoom, hover for detail, type to search-highlight. Deterministic layout, no CDN
-or network (opens offline, NDA-safe). Writes to `~/.atlas/<ws>/graph.html` (or `graph.<repo>.html`
-with `--repo`, or `--out <file>`). A richer companion to `architecture.md`'s static Mermaid diagram.
+### `atlas viz [--workspace <ws>] [--calls] [--repo <id>] [--out <file>]`
+Render an **interactive, self-contained HTML** map of the workspace (ADR 0018). Two levels:
+- **default (system):** one node per repo + per external endpoint, with aggregated cross-repo
+  contract edges (edge weight = number of contracts; hover an edge to list them). A few nodes —
+  the architecture at a glance.
+- **`--calls` / `--repo <id>`:** the function call graph (whole workspace, or one repo) — dense,
+  with labels shown on hover/search so it stays legible.
+
+Nodes coloured by repo; pan/zoom, hover for detail, type to search-highlight. Deterministic
+layout, no CDN or network (opens offline, NDA-safe). Writes `~/.atlas/<ws>/graph.html` (system),
+`graph.calls.html`, or `graph.<repo>.html` (or `--out <file>`). A richer companion to
+`architecture.md`'s static Mermaid diagram.
 
 ### `atlas path <A> <B> [--workspace <ws>] [--max <hops>] [--json]`
 Shortest connection between two symbols/files across the whole workspace — spanning call edges
