@@ -68,7 +68,8 @@ real service needs one — each emits the same normalized JSON; the core is unto
 Do not build any Phase 5 audit/report feature without a superseding ADR (see docs/rejected.md).
 
 Build/run: `npm install && npm run build`, then
-`node bin/atlas.js <scan|context|endpoints|impact|agent|mcp|refresh>`. Tests: `npm test`.
+`node bin/atlas.js <detect|scan|context|impact|path|endpoints|agent|mcp|refresh|hook>`.
+Tests: `npm test`.
 
 ## Conventions
 - CLI entry: `bin/atlas.js` (stub). Commands route to `cli/`.

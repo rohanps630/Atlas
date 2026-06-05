@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const VERSION = "0.0.0 (Phase 1)";
+const VERSION = "0.1.0";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 // Command registry. `available: false` commands are declared so the roadmap is visible

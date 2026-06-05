@@ -39,6 +39,7 @@ node bin/atlas.js scan /path/to/a/repo -w myapp     # role/type auto-detected (o
 node bin/atlas.js context createOrder -w myapp    # a symbol + its callers + callees
 node bin/atlas.js context src/orders/api.ts -w myapp   # or a file → its functions
 node bin/atlas.js impact createOrder -w myapp     # what breaks: callers (intra) + consumers (cross-repo)
+node bin/atlas.js path createOrder save -w myapp  # shortest connection between two symbols (cross-repo)
 node bin/atlas.js endpoints -w myapp              # cross-repo links + external endpoints
 ```
 
@@ -51,7 +52,7 @@ and `--repo` can be omitted. `npm test` runs the core + extractor tests.
 
 ```bash
 node bin/atlas.js agent -w myapp     # generate steering + architecture.md, print wiring
-node bin/atlas.js mcp                # run the MCP server (stdio) for context/callers/impact/endpoints
+node bin/atlas.js mcp                # MCP server (stdio): context/callers/impact/endpoints/path/neighborhood
 ```
 
 `atlas agent` writes an always-on steering file and a greppable `architecture.md` into the
