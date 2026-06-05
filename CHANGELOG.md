@@ -11,6 +11,21 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — viz rebuilt on Cytoscape (compound drill-down, ADR 0018)
+
+- The hand-rolled canvas viz (a flat force graph) wasn't readable — a 1600-node hairball, then an
+  oversized-circle system view. Rebuilt `atlas viz` on **Cytoscape.js + fcose + expand-collapse**,
+  all **vendored under `cli/vendor/` and inlined** (no CDN — still offline / NDA-safe, ADR 0006).
+- Now a **compound hierarchy you click to drill into**: repo → module (directory) → function. The
+  top level is just the repos, joined by **one weighted arrow per repo pair** labelled with the
+  contract count (click it to list the contracts); click a repo to expand into modules, then
+  functions. Expand/Collapse-all + search. `core/viz.ts` builds the Cytoscape model
+  (`buildCyModel`); no schema/core-engine change.
+- Verified by rendering the generated HTML in **headless Chrome** (the only true check) — which
+  caught a real load-time crash: the extensions auto-register as `<script>` tags, so the explicit
+  `cytoscape.use()` calls are now guarded. Dogfooded on HMS (mobile →14→ backend, admin →7→
+  backend reads at a glance). Model unit-tested; 65/65.
+
 ## [Unreleased] — Diff-driven impact + interactive HTML map (ADR 0017, 0018)
 
 Two on-thesis features salvaged from the predecessor system (see `docs/backlog.md`), both pure
