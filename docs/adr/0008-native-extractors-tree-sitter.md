@@ -30,6 +30,8 @@ primary language; this needs no schema change.
   refresh — is untouched; it still only consumes normalized JSON.
 - Lower precision than a type-aware extractor: calls are resolved by name within the repo,
   so overloads/shadowing can mis-link. Acceptable — the map is a hint to verify (#5).
+  (Update: ADR 0012 supersedes the "ambiguous names are skipped" part — calls are now
+  resolved scope/receiver-aware, recovering many previously-skipped ambiguous calls.)
 - Extractor dependencies are allowed (ADR 0005). tree-sitter grammars are native addons
   built via node-gyp; this assumes a C toolchain on the dev machine (present on macOS).
 - HTTP `consumes`/`exposes` stay empty for native code (it doesn't speak HTTP here). The

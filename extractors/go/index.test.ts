@@ -19,6 +19,28 @@ test("extracts go functions and a resolved call edge", () => {
   assert.ok(out.edges.some((e) => e.kind === "call" && e.from === lo.id && e.to === save.id));
 });
 
+test("scope/receiver layers resolve calls ambiguous by short name (ADR 0012)", () => {
+  const out = extractGo({ repoPath: fixture, repoId: "gm" });
+  const byName = (n: string) => out.nodes.find((x) => x.name === n)!;
+  const hasCall = (from: string, to: string) =>
+    out.edges.some((e) => e.kind === "call" && e.from === byName(from).id && e.to === byName(to).id);
+
+  // receiver/struct-field: s.repo.save() → Repo.save, NOT the free save().
+  assert.ok(hasCall("Server.handle", "Repo.save"), "expected Server.handle → Repo.save");
+  assert.ok(!hasCall("Server.handle", "save"), "must not link to the free save()");
+
+  // package scope: a bare helper() call, unique in the package, resolves.
+  assert.ok(hasCall("Server.handle", "helper"), "expected Server.handle → helper");
+
+  // negative: an ambiguous call on an un-typed receiver must emit NO edge — we
+  // never guess among same-named candidates.
+  const mystery = byName("Server.mystery");
+  assert.ok(
+    !out.edges.some((e) => e.kind === "call" && e.from === mystery.id),
+    "ambiguous call on unknown receiver must not resolve",
+  );
+});
+
 test("chi exposes resolve nested Route + const BasePath into full paths", () => {
   const out = extractGo({ repoPath: fixture, repoId: "gm" });
   const paths = out.endpoints.exposes.map((e) => `${e.method} ${e.path}`);

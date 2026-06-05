@@ -11,6 +11,26 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Scope/receiver-aware call resolution (ADR 0012)
+
+- No schema change: extractor output shape is unchanged; the core is untouched (ADR 0005).
+- The Go and native (Swift/Kotlin) tree-sitter extractors no longer skip every call whose
+  short name is non-unique in the repo. A shared, precision-ordered resolver
+  (`extractors/shared/resolve.ts`) tries **receiver/type → same-scope → repo-global** and emits
+  an edge only when a layer narrows to exactly one target — monotonic over the old global-unique
+  policy (every prior edge preserved; only adds), so no wrong edges.
+  - Go: a lightweight per-function type environment (receiver, params, `var`/`:=`) plus a
+    repo-wide **struct-field** map resolves receiver chains like `s.deps.Auth.Register()`;
+    bare `f()` resolves within the caller's package.
+  - Native: bare/`this`/`self` calls resolve to the enclosing class's method (scope);
+    `val/let x = Foo()` receivers resolve `x.m()` to `Foo.m` (receiver).
+  - Supersedes the "ambiguous names are skipped" consequence of ADR 0008 / 0010 only.
+- Per-repo resolution counters (total / resolved / via-layer / skipped-ambiguous / unresolved)
+  are exposed out-of-band for measurement (and the upcoming coverage signal) — never persisted.
+- Dogfooded on HMS (same source, before→after call edges): hms-backend 296→328, hms-telephony
+  378→394, hms-mobile 1497→1601 (+152 total); TS repos unchanged; **21 cross-repo links and 3
+  externals intact**; tests green; new fixtures/assertions for the receiver/scope/negative cases.
+
 ## [Unreleased] — Cross-platform (macOS / Linux / Windows)
 
 - Confirmed/hardened cross-OS support: the git auto-refresh hook and the printed wiring lines
