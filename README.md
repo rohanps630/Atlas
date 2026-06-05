@@ -168,7 +168,7 @@ Every flag, output, and exit code: [`docs/cli.md`](docs/cli.md).
 
 | Language | Nodes & edges | HTTP endpoints |
 |---|---|---|
-| TypeScript / JavaScript | functions, modules, imports, calls | `consumes` (fetch / axios / client calls) |
+| TypeScript / JavaScript | functions, modules, imports, calls | `consumes` (fetch / axios / client calls) · `exposes` (Express incl. mounted-router prefixes, NestJS decorators) |
 | Go | functions, methods, calls | `exposes` (chi routes, incl. nested + const base paths) |
 | Kotlin | functions, methods, calls | `consumes` (Retrofit annotations) |
 | Swift | functions, methods, calls | — |

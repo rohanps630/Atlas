@@ -19,6 +19,7 @@ not silently change course — write a new ADR that **supersedes** the old one a
 | [0011](0011-kotlin-retrofit-consumes.md) | Kotlin Retrofit consumes extraction | Accepted |
 | [0012](0012-scope-receiver-aware-call-resolution.md) | Scope- & receiver-aware call resolution (tree-sitter) | Accepted |
 | [0013](0013-call-resolution-coverage-signal.md) | Call-resolution coverage signal (descriptive, not a score) | Accepted |
+| [0014](0014-express-nest-exposes.md) | Express mount-prefix + NestJS exposes extraction | Accepted |
 
 ## Format
 

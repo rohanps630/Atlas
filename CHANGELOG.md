@@ -11,6 +11,26 @@ surface. Dogfooded on ghost_daddy and the 5-repo HMS system. Schema is v0; the c
 (graph/linker/impact/path) never depends on any language. The sections below are the detailed
 history that rolls up into this release.
 
+## [Unreleased] — Express mount-prefix + NestJS exposes (ADR 0014)
+
+- No schema change: additive `exposes` only; the linker and core are untouched (ADR 0005).
+- The TS extractor already emitted basic Express `exposes` (`app.get("/path", handler)`); a probe
+  found two real gaps, now closed:
+  - **Express mounted-router prefixes**: route registrations are collected keyed by their
+    router's resolved declaration, and `parent.use("/prefix", router)` mounts are joined onto
+    them — even across files (a `Router()` defined in one file and mounted in another), walked
+    transitively through nested mounts. Unmounted routers keep their bare path (no regression).
+  - **NestJS decorators**: a `@Controller(base)` class + method `@Get/@Post/...(sub)` decorators
+    expose `VERB /base/sub`, handler = the method's `Class.method` node. Previously a Nest
+    backend produced zero exposes (decorators aren't call expressions).
+- Best-effort/syntactic where the value isn't static: dynamic prefixes, `RouterModule.forRoutes`
+  config routing, and non-literal paths are skipped, not guessed (philosophy #5).
+- Validated on probe fixtures (`fixtures/node-svc` + `fixtures/node-web`) — there is no real
+  Node/Express/Nest backend in the dogfood workspaces (HMS is Go, ghost is RN), so this has
+  weaker real-repo evidence than the Go/Kotlin work; the fixtures encode the common patterns and
+  a cross-repo link test (FE `axios` calls ↔ Express mounted-router + Nest routes).
+- HMS unchanged (no Node backend): 21 cross-repo links / 3 externals intact; tests 57/57.
+
 ## [Unreleased] — Call-resolution coverage signal (ADR 0013)
 
 - No schema change: a new generated artifact `~/.atlas/<ws>/<repoId>.resolution.json` alongside
