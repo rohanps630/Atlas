@@ -2,6 +2,22 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Agent-efficiency Tier 1 (path, budgets, orientation)
+
+Ports the deterministic, on-thesis agent-query refinements from graphify (no embeddings/
+multimodal/clustering) to cut token cost and reduce mistakes.
+
+- **`atlas path <A> <B>`** (+ MCP `atlas_path`): shortest connection between two symbols/files
+  across the whole workspace, spanning call edges and cross-repo `http` contracts
+  (`core/path.ts`, `cli/query.ts#workspaceGraph`). Answers "how does A reach B" in one query.
+- **Bounded results**: `atlas impact` gains `--depth` (cap caller-walk depth) and `--limit`
+  (cap returned callers, with "+N more"); MCP results cap lists at 50 with a `truncated` count.
+  `transitiveCallers` takes `maxDepth`.
+- **Orientation digest** in `architecture.md`: deterministic top hubs (most-called functions)
+  + scoped "suggested questions" so an agent orients in one read (`core/orientation.ts`).
+- Schema: `http` added to the `EdgeKind` union for the unified graph (clarification — extractor
+  output never emits it; no version bump, persisted shapes unchanged).
+
 ## [Unreleased] — Mermaid diagram, language registry, git hook
 
 - No schema change.

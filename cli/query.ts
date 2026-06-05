@@ -5,16 +5,46 @@
  * clear error (the MCP server turns these into tool errors).
  */
 
-import { buildGraph } from "../core/graph.js";
+import { buildGraph, Graph } from "../core/graph.js";
 import { contextPack, resolveTargets, type ContextPack } from "../core/context.js";
 import { transitiveCallers } from "../core/impact.js";
-import type { AtlasNode, CrossRepoEdge, MergedMap } from "../core/schema.js";
+import { shortestPath, type PathResult } from "../core/path.js";
+import type { AtlasEdge, AtlasNode, CrossRepoEdge, MergedMap } from "../core/schema.js";
 import {
   listWorkspaces,
+  readAllTopologies,
   readMap,
   readTopology,
   reposInWorkspace,
 } from "./store.js";
+
+/** Default cap on list sizes in structured (MCP) results, to bound token cost. */
+export const DEFAULT_LIMIT = 50;
+
+/** Cap a list, returning the slice plus how many were dropped. */
+export function cap<T>(items: T[], limit = DEFAULT_LIMIT): { items: T[]; truncated: number } {
+  return limit >= items.length
+    ? { items, truncated: 0 }
+    : { items: items.slice(0, limit), truncated: items.length - limit };
+}
+
+/**
+ * A single graph spanning every repo in the workspace: all nodes/edges plus the
+ * resolved cross-repo `http` contract edges. Used for path queries.
+ */
+export function workspaceGraph(workspace: string): Graph {
+  const tops = readAllTopologies(workspace);
+  const nodes = tops.flatMap((t) => t.nodes);
+  const edges: AtlasEdge[] = tops.flatMap((t) => t.edges);
+  try {
+    for (const e of readMap(workspace).crossRepoEdges) {
+      edges.push({ from: e.from, to: e.to, kind: "http", line: 0 });
+    }
+  } catch {
+    /* no map yet */
+  }
+  return new Graph(nodes, edges);
+}
 
 export function pickWorkspace(requested?: string): string {
   if (requested) return requested;
@@ -50,23 +80,53 @@ export interface ImpactResult {
   targets: AtlasNode[];
   callers: AtlasNode[];
   crossRepo: CrossRepoEdge[];
+  /** How many callers were dropped by `limit` (0 if none). */
+  truncated: number;
 }
 
-export function queryImpact(query: string, workspace?: string, repo?: string): ImpactResult {
+export function queryImpact(
+  query: string,
+  workspace?: string,
+  repo?: string,
+  opts: { maxDepth?: number; limit?: number } = {},
+): ImpactResult {
   const ws = pickWorkspace(workspace);
   const graph = buildGraph(readTopology(ws, pickRepo(ws, repo)));
   const { nodes: targets, resolvedAs } = resolveTargets(graph, query);
-  const callers = transitiveCallers(graph, targets.map((t) => t.id));
-  const affected = new Set<string>([...targets.map((t) => t.id), ...callers.map((c) => c.id)]);
+  const all = transitiveCallers(graph, targets.map((t) => t.id), { maxDepth: opts.maxDepth });
+  const affected = new Set<string>([...targets.map((t) => t.id), ...all.map((c) => c.id)]);
   let crossRepo: CrossRepoEdge[] = [];
   try {
     crossRepo = readMap(ws).crossRepoEdges.filter((e) => affected.has(e.to));
   } catch {
     /* no map */
   }
-  return { query, resolvedAs, targets, callers, crossRepo };
+  const { items: callers, truncated } = cap(all, opts.limit ?? DEFAULT_LIMIT);
+  return { query, resolvedAs, targets, callers, crossRepo, truncated };
 }
 
 export function queryEndpoints(workspace?: string): MergedMap {
   return readMap(pickWorkspace(workspace));
+}
+
+export interface PathQueryResult {
+  from: string;
+  to: string;
+  found: boolean;
+  hops: PathResult["hops"];
+}
+
+/** Shortest connection between two symbols/files across the whole workspace. */
+export function queryPath(
+  from: string,
+  to: string,
+  workspace?: string,
+  maxHops?: number,
+): PathQueryResult {
+  const g = workspaceGraph(pickWorkspace(workspace));
+  const a = resolveTargets(g, from).nodes.map((n) => n.id);
+  const b = resolveTargets(g, to).nodes.map((n) => n.id);
+  if (a.length === 0 || b.length === 0) return { from, to, found: false, hops: [] };
+  const res = shortestPath(g, a, b, { maxHops: maxHops ?? 12 });
+  return { from, to, found: !!res, hops: res?.hops ?? [] };
 }

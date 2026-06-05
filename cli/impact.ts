@@ -1,98 +1,79 @@
 /**
- * `atlas impact <symbol|file> [--workspace <ws>] [--repo <id>] [--json]`
+ * `atlas impact <symbol|file> [--workspace <ws>] [--repo <id>] [--depth N] [--limit N] [--json]`
  *
- * "If I change this, what breaks?" Combines two layers:
- *   - intra-repo: every function that transitively calls the target
- *   - cross-repo: any repo that consumes an endpoint handled by the target
- *     (or by one of those transitive callers), via the merged map
+ * "If I change this, what breaks?" — transitive intra-repo callers plus cross-repo
+ * consumers (via the merged map). `--depth` bounds how far callers are walked and
+ * `--limit` caps how many are returned, keeping the answer's token cost predictable.
  */
 
-import { buildGraph } from "../core/graph.js";
-import { resolveTargets } from "../core/context.js";
-import { transitiveCallers } from "../core/impact.js";
-import type { CrossRepoEdge } from "../core/schema.js";
-import { readMap, readTopology, reposInWorkspace } from "./store.js";
-import { resolveWorkspace } from "./workspace.js";
+import { queryImpact } from "./query.js";
 
 export function runImpact(args: string[]): number {
-  const { query, repo, workspace, json } = parseArgs(args);
+  const { query, repo, workspace, depth, limit, json } = parseArgs(args);
   if (!query) {
     console.error(
-      "usage: atlas impact <symbol|file> [--workspace <ws>] [--repo <id>] [--json]",
+      "usage: atlas impact <symbol|file> [--workspace <ws>] [--repo <id>] [--depth N] [--limit N] [--json]",
     );
     return 1;
   }
 
-  const ws = resolveWorkspace(workspace);
-  if (!ws) return 1;
-  const repoId = repo ?? soleRepo(ws);
-  if (!repoId) return 1;
-
-  const graph = buildGraph(readTopology(ws, repoId));
-  const { nodes: targets, resolvedAs } = resolveTargets(graph, query);
-  if (resolvedAs === "unresolved") {
-    console.log(`No match for "${query}" in ${repoId}.`);
-    return 2;
-  }
-
-  const targetIds = targets.map((t) => t.id);
-  const callers = transitiveCallers(graph, targetIds);
-
-  // Cross-repo: consumers whose link target is the target or any caller.
-  const affected = new Set<string>([...targetIds, ...callers.map((c) => c.id)]);
-  let crossRepo: CrossRepoEdge[] = [];
+  let res;
   try {
-    crossRepo = readMap(ws).crossRepoEdges.filter((e) => affected.has(e.to));
-  } catch {
-    /* no map yet — intra-repo impact only */
+    res = queryImpact(query, workspace, repo, { maxDepth: depth, limit });
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
   }
 
   if (json) {
-    console.log(JSON.stringify({ query, resolvedAs, targets, callers, crossRepo }, null, 2));
-    return 0;
+    console.log(JSON.stringify(res, null, 2));
+    return res.resolvedAs === "unresolved" ? 2 : 0;
   }
 
-  console.log(`# impact of ${query}  (${resolvedAs} in ${repoId})\n`);
-  for (const t of targets) console.log(`target: ${t.name}  ${t.file}:${t.line}`);
+  if (res.resolvedAs === "unresolved") {
+    console.log(`No match for "${query}".`);
+    return 2;
+  }
 
-  console.log(`\nintra-repo — transitively affected callers (${callers.length}):`);
-  for (const c of callers) console.log(`  ↑ ${c.name}  ${c.file}:${c.line}`);
+  console.log(`# impact of ${query}  (${res.resolvedAs})\n`);
+  for (const t of res.targets) console.log(`target: ${t.name}  ${t.file}:${t.line}`);
 
-  console.log(`\ncross-repo — downstream consumers (${crossRepo.length}):`);
-  for (const e of crossRepo) {
+  const shown = res.callers.length;
+  const total = shown + res.truncated;
+  console.log(`\nintra-repo — transitively affected callers (${total}):`);
+  for (const c of res.callers) console.log(`  ↑ ${c.name}  ${c.file}:${c.line}`);
+  if (res.truncated > 0) console.log(`  … and ${res.truncated} more (raise --limit to see them)`);
+
+  console.log(`\ncross-repo — downstream consumers (${res.crossRepo.length}):`);
+  for (const e of res.crossRepo) {
     console.log(`  ⇄ ${e.contract}`);
     console.log(`      consumed by ${e.from}`);
   }
   return 0;
 }
 
-function soleRepo(workspace: string): string | undefined {
-  const repos = reposInWorkspace(workspace);
-  if (repos.length === 1) return repos[0];
-  if (repos.length === 0) {
-    console.error(`No scanned repos in workspace "${workspace}".`);
-    return undefined;
-  }
-  console.error(`Multiple repos in "${workspace}": ${repos.join(", ")}. Use --repo <id>.`);
-  return undefined;
-}
-
 function parseArgs(args: string[]): {
   query?: string;
   repo?: string;
   workspace?: string;
+  depth?: number;
+  limit?: number;
   json: boolean;
 } {
   let query: string | undefined;
   let repo: string | undefined;
   let workspace: string | undefined;
+  let depth: number | undefined;
+  let limit: number | undefined;
   let json = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--repo") repo = args[++i];
     else if (a === "--workspace" || a === "-w") workspace = args[++i];
+    else if (a === "--depth") depth = Number(args[++i]);
+    else if (a === "--limit") limit = Number(args[++i]);
     else if (a === "--json") json = true;
     else if (a && !a.startsWith("-")) query ??= a;
   }
-  return { query, repo, workspace, json };
+  return { query, repo, workspace, depth, limit, json };
 }

@@ -74,7 +74,9 @@ sees source code, only this.
 ```
 
 **Node `kind`:** `function` | `class` | `module` | `service` | `endpoint` | `external`
-**Edge `kind`:** `call` | `import` | `inherit` | `expose` | `consume`
+**Edge `kind`:** `call` | `import` | `inherit` | `expose` | `consume` | `http`
+(`http` is the cross-repo contract edge, used only in the unified/merged graph (§3);
+per-repo extractor output never emits it.)
 **Node `id` format:** `<repoId>:<relativeFile>#<symbol>` — globally unique across the workspace.
 A whole-file (`module`) node has no symbol, so its id omits the suffix:
 `<repoId>:<relativeFile>`. `import` edges connect these module nodes (file → file).
