@@ -10,9 +10,17 @@ interactive force-layout HTML visualizer (`visualizer.js` + `force-layout.js`) �
 deterministic, no LLM. That capability is on-thesis (rendering the exact map we already have) and
 worth bringing over, cleanly.
 
+## Update (post-merge)
+Defaulting to the full **function** call graph proved an unreadable hairball on a real workspace
+(hms: 1600+ nodes, overlapping labels). The default is now the **system** level — one node per
+repo + per external endpoint, with aggregated cross-repo contract edges (a handful of nodes, the
+architecture at a glance). The dense call graph is kept as an explicit drill-down: `--calls` for
+the whole workspace, or `--repo <id>` for one repo, with labels shown only on hover (not all at
+once). The rest of this ADR describes the original mechanism, which the `calls` level still uses.
+
 ## Decision
-Add `atlas viz [-w <ws>] [--repo <id>] [--out <file>]`: render the workspace's merged map to a
-**self-contained** interactive HTML force-directed graph.
+Add `atlas viz [-w <ws>] [--calls] [--repo <id>] [--out <file>]`: render the workspace's merged map
+to a **self-contained** interactive HTML force-directed graph.
 
 - **Model** (pure, `core/viz.ts`): nodes = every node that participates in an edge (isolated nodes
   are dropped — they carry no relationships); edges = intra-repo `call`/`import` + cross-repo
