@@ -2,6 +2,20 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Conventions / golden-files surface
+
+Adapted from codebase-context (the one genuinely new idea across the tool-comparison
+exercises): help the agent write code that *fits*, not just code that compiles.
+
+- `core/conventions.ts` (pure, deterministic — no LLM/scoring/trends): detects architectural
+  layers from paths (`services/`, `handlers/`, `hooks/`, …), the dominant file-naming pattern
+  per layer (`*_handler.go`, `use-*.ts`, `*Repository.kt`), and an **exemplar file** to copy
+  (chosen by in-degree — the most-used file in that layer).
+- Surfaced as a "Conventions" section in `architecture.md`, with a steering pointer to consult
+  it before writing new files. No schema change.
+- Dogfooded on HMS: correctly surfaced Go `*_handler.go`/`*_usecase.go`, React `use-*.ts`,
+  Kotlin `*Repository.kt` with exemplars per layer.
+
 ## [Unreleased] — Agent-efficiency Tier 2 (neighborhood, landmines, search-nudge)
 
 - **`atlas_neighborhood`** MCP tool (+ `queryNeighborhood`): the depth/size-bounded local call

@@ -20,6 +20,7 @@ import { linkRepos } from "../core/link.js";
 import { systemDiagram } from "../core/mermaid.js";
 import { Graph } from "../core/graph.js";
 import { topHubs, suggestedQuestions } from "../core/orientation.js";
+import { conventions, type LayerConvention } from "../core/conventions.js";
 import { collectLandmines } from "./landmines.js";
 import type { ExtractorOutput, Manifest, MergedMap } from "../core/schema.js";
 import {
@@ -91,6 +92,23 @@ function architectureMd(m: Manifest, tops: ExtractorOutput[], map: MergedMap): s
     L.push("");
     L.push(`Ask the map (CLI \`atlas …\` or the \`atlas_*\` MCP tools) instead of reading files:`);
     for (const q of suggestedQuestions(hubs, map)) L.push(`- ${q}`);
+    L.push("");
+  }
+
+  const conv = conventions(wg);
+  if (conv.length > 0) {
+    L.push(`## Conventions (write code that fits)`);
+    L.push(`When adding to a layer, follow its naming and copy the exemplar file:`);
+    let repo = "";
+    for (const c of conv) {
+      if (c.repo !== repo) {
+        repo = c.repo;
+        L.push(`- **${repo}**`);
+      }
+      const naming = c.naming ? ` named \`${c.naming}\`` : "";
+      const eg = c.exemplar ? ` — copy \`${c.exemplar.file}\`` : "";
+      L.push(`  - \`${c.dir}/\` (${c.files} files)${naming}${eg}`);
+    }
     L.push("");
   }
 
@@ -185,7 +203,10 @@ ${stack.length ? `\nDetected stack (auto): ${stack.join("; ")}.\n` : ""}
   \`atlas_impact\`, \`atlas_endpoints\`. Prefer these for structured results.
 
 ## Read for a quick overview
-- \`~/.atlas/${ws}/architecture.md\` — summary (repos, links, external backends).
+- \`~/.atlas/${ws}/architecture.md\` — orientation (hubs, suggested questions),
+  **conventions** (per-layer naming + exemplar file to copy when adding code),
+  **landmines** (TODO/FIXME/HACK/WHY), the system diagram, and external backends.
+  Consult conventions before writing new files so your code matches this codebase.
 `;
 }
 
