@@ -16,13 +16,18 @@ for (const language of ["swift", "kotlin"] as const) {
     assert.ok(names.includes("Greeter.greet"), `expected Greeter.greet, got ${names}`);
     assert.ok(names.includes("Greeter.build"), `expected Greeter.build, got ${names}`);
 
-    // greet() calls build() — resolved by unique short name within the repo.
+    // `build` is ambiguous repo-wide (Greeter.build + Other.build). The bare
+    // call build() inside Greeter resolves to Greeter.build via the class-scope
+    // layer (ADR 0012) — the pre-0012 resolver would have skipped it.
     const greet = out.nodes.find((n) => n.name === "Greeter.greet")!;
     const build = out.nodes.find((n) => n.name === "Greeter.build")!;
-    const linked = out.edges.some(
-      (e) => e.kind === "call" && e.from === greet.id && e.to === build.id,
-    );
-    assert.ok(linked, "expected Greeter.greet → Greeter.build call edge");
+    const otherBuild = out.nodes.find((n) => n.name === "Other.build")!;
+    const hasCall = (to: string) =>
+      out.edges.some((e) => e.kind === "call" && e.from === greet.id && e.to === to);
+    assert.ok(hasCall(build.id), "expected Greeter.greet → Greeter.build (scope)");
+
+    // `val o = Other(); o.build()` resolves to Other.build via the receiver layer.
+    assert.ok(hasCall(otherBuild.id), "expected Greeter.greet → Other.build (receiver)");
   });
 }
 

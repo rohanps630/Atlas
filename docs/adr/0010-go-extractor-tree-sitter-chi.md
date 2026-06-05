@@ -19,6 +19,8 @@ values (`deps.AuthHandler.Register`).
 Add `extractors/go` using `tree-sitter-go`, emitting the standard normalized JSON:
 - `function` nodes for `function_declaration` and `method_declaration` (named `Recv.method`);
   `call` edges resolved by unique short name within the repo (same policy as ADR 0008).
+  (Update: ADR 0012 supersedes the unique-short-name limit — receiver/type and package
+  scope now disambiguate, so ambiguous calls are resolved instead of skipped.)
 - `exposes` for chi route registrations: walk each leaf `r.<verb>("/path", handler)` up its
   ancestors to collect enclosing `r.Route(prefix, …)` / `r.Mount(prefix, …)` prefixes and
   build the full path. Prefix args that are **string constants** are resolved via a repo-wide
