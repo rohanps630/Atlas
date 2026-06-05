@@ -2,6 +2,12 @@
 
 Schema changes must be recorded here (see docs/schema.md).
 
+## [Unreleased] — Go chi exposes precision fix
+
+- Go extractor: a chi route now requires a `/`-prefixed literal path AND a handler argument,
+  rejecting verb-method look-alikes like `url.Values.Get("kind")` / `header.Get("X-…")`.
+  (HMS: hms-backend 39→32, hms-telephony 16→9 exposes; cross-repo links unchanged.)
+
 ## [Unreleased] — Kotlin Retrofit consumes (ADR 0011)
 
 - No schema change.

@@ -130,7 +130,11 @@ function chiExpose(
   const args = call.childForFieldName("arguments");
   const pathArg = args?.namedChild(0);
   const leaf = stringValue(pathArg);
-  if (leaf === undefined) return undefined;
+  // A chi route literal always starts with "/" and is registered with a handler
+  // argument. This rejects look-alikes like url.Values.Get("kind") /
+  // header.Get("X-…") that share the verb method name but aren't routes.
+  if (leaf === undefined || !leaf.startsWith("/")) return undefined;
+  if (!args || args.namedChildCount < 2) return undefined;
 
   // Collect enclosing Route/Mount prefixes (innermost → outermost), then reverse.
   const prefixes: string[] = [];
