@@ -1,66 +1,76 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVizModel } from "./viz.js";
+import { buildCyModel } from "./viz.js";
 import { SCHEMA_VERSION, type ExtractorOutput, type MergedMap } from "./schema.js";
 
-function topo(repo: string, nodes: [string, string][], edges: [string, string][]): ExtractorOutput {
+function topo(repo: string, fns: [string, string][], edges: [string, string][]): ExtractorOutput {
   return {
     schemaVersion: SCHEMA_VERSION,
     repo,
     generatedAt: "t",
-    nodes: nodes.map(([sym, file]) => ({ id: `${repo}:${file}#${sym}`, kind: "function", name: sym, file, line: 1 })),
-    edges: edges.map(([f, t]) => ({ from: `${repo}:x#${f}`, to: `${repo}:x#${t}`, kind: "call" as const, line: 1 })),
+    nodes: fns.map(([sym, file]) => ({ id: `${repo}:${file}#${sym}`, kind: "function", name: sym, file, line: 1 })),
+    edges: edges.map(([f, t]) => ({ from: f, to: t, kind: "call" as const, line: 1 })),
     endpoints: { consumes: [], exposes: [] },
   };
 }
 
-const MAP: MergedMap = {
-  schemaVersion: SCHEMA_VERSION,
-  workspace: "w",
-  generatedAt: "t",
-  repos: ["web", "svc"],
-  crossRepoEdges: [
-    { from: "web:api#a", to: "svc:h#x", kind: "http", contract: "GET /x" },
-    { from: "web:api#b", to: "svc:h#y", kind: "http", contract: "POST /y" },
-  ],
-  externalNodes: [{ id: "external:POST /pay", reason: "no repo exposes it", consumedBy: ["web:api#c"] }],
-};
-
-test("system level: one node per repo + externals, aggregated contract edges", () => {
-  const web = topo("web", [["a", "x"]], []);
-  const svc = topo("svc", [["x", "h"]], []);
-  const m = buildVizModel([web, svc], MAP); // default level = system
-
-  assert.equal(m.level, "system");
-  assert.deepEqual(m.nodes.filter((n) => n.kind === "repo").map((n) => n.id).sort(), ["svc", "web"]);
-  assert.ok(m.nodes.some((n) => n.kind === "external" && n.label === "POST /pay"));
-
-  // the two web→svc contracts aggregate into one weighted edge.
-  const webToSvc = m.edges.find((e) => e.from === "web" && e.to === "svc");
-  assert.ok(webToSvc, "expected an aggregated web→svc edge");
-  assert.equal(webToSvc!.weight, 2);
-  assert.deepEqual(webToSvc!.contracts!.sort(), ["GET /x", "POST /y"]);
-  // and a web→external edge.
-  assert.ok(m.edges.some((e) => e.from === "web" && e.to === "external:POST /pay"));
-});
-
-test("calls level: connected function nodes, isolated dropped, deterministic", () => {
-  const t = topo("r", [["a", "x"], ["b", "x"], ["lonely", "x"]], [["a", "b"]]);
-  const m = buildVizModel([t], undefined, { level: "calls" });
-  assert.equal(m.level, "calls");
-  assert.deepEqual(m.nodes.map((n) => n.label).sort(), ["a", "b"]); // 'lonely' dropped
-
-  const again = buildVizModel([t], undefined, { level: "calls" });
-  assert.deepEqual(
-    m.nodes.map((n) => [n.id, n.x, n.y]),
-    again.nodes.map((n) => [n.id, n.x, n.y]),
+test("buildCyModel produces a repo → module → function compound hierarchy", () => {
+  const t = topo(
+    "web",
+    [["a", "src/api/x.ts"], ["b", "src/api/x.ts"], ["c", "src/util/y.ts"]],
+    [["web:src/api/x.ts#a", "web:src/util/y.ts#c"]],
   );
+  const m = buildCyModel([t], undefined);
+
+  const byId = new Map(m.nodes.map((n) => [n.data.id as string, n.data]));
+  assert.ok(byId.has("repo:web"));
+  // functions parent to their directory module, which parents to the repo.
+  const a = byId.get("web:src/api/x.ts#a")!;
+  assert.equal(a.kind, "fn");
+  assert.equal(a.parent, "mod:web/src/api");
+  assert.equal(byId.get("mod:web/src/api")!.parent, "repo:web");
+  assert.equal(byId.get("mod:web/src/util")!.parent, "repo:web");
+
+  assert.deepEqual(m.counts, { repos: 1, modules: 2, functions: 3, edges: 1 });
+  assert.equal(m.edges[0]!.data.kind, "call");
 });
 
-test("--repo implies the calls level for one repo", () => {
-  const web = topo("web", [["a", "x"], ["b", "x"]], [["a", "b"]]);
-  const svc = topo("svc", [["x", "h"], ["y", "h"]], [["x", "y"]]);
-  const m = buildVizModel([web, svc], undefined, { repo: "web" });
-  assert.equal(m.level, "calls");
-  assert.ok(m.nodes.every((n) => n.repo === "web"), "scoped to web only");
+test("cross-repo contracts become one weighted repo→repo summary edge", () => {
+  const web = topo("web", [["a", "src/api.ts"], ["b", "src/api.ts"]], []);
+  const svc = topo("svc", [["x", "h.go"], ["y", "h.go"]], []);
+  const map: MergedMap = {
+    schemaVersion: SCHEMA_VERSION,
+    workspace: "w",
+    generatedAt: "t",
+    repos: ["web", "svc"],
+    crossRepoEdges: [
+      { from: "web:src/api.ts#a", to: "svc:h.go#x", kind: "http", contract: "GET /x" },
+      { from: "web:src/api.ts#b", to: "svc:h.go#y", kind: "http", contract: "POST /y" },
+    ],
+    externalNodes: [],
+  };
+  const m = buildCyModel([web, svc], map);
+  const http = m.edges.filter((e) => e.data.kind === "repohttp");
+  assert.equal(http.length, 1, "two contracts aggregate into one repo→repo edge");
+  assert.equal(http[0]!.data.source, "repo:web");
+  assert.equal(http[0]!.data.target, "repo:svc");
+  assert.equal(http[0]!.data.weight, 2);
+  assert.deepEqual((http[0]!.data.contracts as string[]).sort(), ["GET /x", "POST /y"]);
+});
+
+test("--repo scopes to one repo (and omits cross-repo edges)", () => {
+  const web = topo("web", [["a", "x.ts"]], []);
+  const svc = topo("svc", [["h", "h.go"]], []);
+  const map: MergedMap = {
+    schemaVersion: SCHEMA_VERSION,
+    workspace: "w",
+    generatedAt: "t",
+    repos: ["web", "svc"],
+    crossRepoEdges: [{ from: "web:x.ts#a", to: "svc:h.go#h", kind: "http", contract: "GET /x" }],
+    externalNodes: [],
+  };
+  const m = buildCyModel([web, svc], map, { repo: "web" });
+  assert.deepEqual(m.repos, ["web"]);
+  assert.ok(m.nodes.every((n) => n.data.repo === "web"));
+  assert.equal(m.edges.length, 0);
 });

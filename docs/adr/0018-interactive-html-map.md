@@ -10,13 +10,24 @@ interactive force-layout HTML visualizer (`visualizer.js` + `force-layout.js`) �
 deterministic, no LLM. That capability is on-thesis (rendering the exact map we already have) and
 worth bringing over, cleanly.
 
-## Update (post-merge)
-Defaulting to the full **function** call graph proved an unreadable hairball on a real workspace
-(hms: 1600+ nodes, overlapping labels). The default is now the **system** level — one node per
-repo + per external endpoint, with aggregated cross-repo contract edges (a handful of nodes, the
-architecture at a glance). The dense call graph is kept as an explicit drill-down: `--calls` for
-the whole workspace, or `--repo <id>` for one repo, with labels shown only on hover (not all at
-once). The rest of this ADR describes the original mechanism, which the `calls` level still uses.
+## Update 2 (post-merge) — Cytoscape compound drill-down
+The hand-rolled canvas renderer didn't reach the readability of real tools. Replaced with
+**Cytoscape.js** + the **fcose** layout + the **expand-collapse** extension, all **vendored under
+`cli/vendor/` and inlined** into the output (no CDN — still offline / NDA-safe, ADR 0006). The
+model is now a **compound hierarchy** (`core/viz.ts buildCyModel`): repo → module (directory) →
+function. The top level shows just the repos with **one weighted `repohttp` edge per repo pair**
+(labelled with the contract count; click it to list the contracts); you **click a node to drill
+in** to its modules, then functions, with Expand/Collapse-all + search controls. This supersedes
+the `--calls` flag and the system/calls split; the click-to-drill replaces both. The Context and
+Decision below remain the rationale; the *mechanism* is now Cytoscape, not a custom canvas.
+
+Verified by rendering the generated HTML in headless Chrome (the only true check) — which also
+caught a real load-time crash (the extensions auto-register when loaded as `<script>` tags, so the
+explicit `cytoscape.use()` calls had to be guarded).
+
+## Update 1 (post-merge)
+Defaulting to the full **function** call graph was an unreadable hairball (hms: 1600+ nodes) —
+fixed properly by Update 2's drill-down.
 
 ## Decision
 Add `atlas viz [-w <ws>] [--calls] [--repo <id>] [--out <file>]`: render the workspace's merged map
